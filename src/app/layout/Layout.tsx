@@ -25,7 +25,7 @@ export interface LayoutProps {
 }
 
 const RoleSwitcherSlot = (
-  <div className="mt-auto border-t border-gray-200 pt-1 pb-2">
+  <div className="mt-auto border-t border-white/10 pt-1 pb-2">
     <RoleSwitcher />
   </div>
 );

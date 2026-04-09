@@ -12,7 +12,7 @@ import {
   screensetRegistry,
   i18nRegistry,
 } from '@hai3/react';
-import { INSIGHT_SCREENSET_ID, DOCUMENTATION_SCREEN_ID, DASHBOARD_SCREEN_ID, SPEED_SCREEN_ID, UIKIT_SCREEN_ID, EXECUTIVE_VIEW_SCREEN_ID, TEAM_VIEW_SCREEN_ID, IC_DASHBOARD_SCREEN_ID, MY_DASHBOARD_SCREEN_ID } from './ids';
+import { INSIGHT_SCREENSET_ID, EXECUTIVE_VIEW_SCREEN_ID, TEAM_VIEW_SCREEN_ID, IC_DASHBOARD_SCREEN_ID, MY_DASHBOARD_SCREEN_ID } from './ids';
 import insightSlice from './slices/insightSlice';
 import { initializeInsightEffects } from './effects/insightEffects';
 import periodSlice from './slices/periodSlice';
@@ -116,7 +116,7 @@ export const insightScreenset: ScreensetConfig = {
       menuItem: {
         id: EXECUTIVE_VIEW_SCREEN_ID,
         label: `screenset.${INSIGHT_SCREENSET_ID}:menu_items.executive-view.label`,
-        icon: 'lucide:bar-chart-2',
+        icon: 'lucide:building-2',
       },
       screen: () => import('./screens/executive-view/ExecutiveViewScreen'),
     },
@@ -130,14 +130,6 @@ export const insightScreenset: ScreensetConfig = {
     },
     {
       menuItem: {
-        id: IC_DASHBOARD_SCREEN_ID,
-        label: `screenset.${INSIGHT_SCREENSET_ID}:menu_items.ic-dashboard.label`,
-        icon: 'lucide:user',
-      },
-      screen: () => import('./screens/ic-dashboard/IcDashboardScreen'),
-    },
-    {
-      menuItem: {
         id: MY_DASHBOARD_SCREEN_ID,
         label: `screenset.${INSIGHT_SCREENSET_ID}:menu_items.my-dashboard.label`,
         icon: 'lucide:user-circle',
@@ -146,35 +138,11 @@ export const insightScreenset: ScreensetConfig = {
     },
     {
       menuItem: {
-        id: DOCUMENTATION_SCREEN_ID,
-        label: `screenset.${INSIGHT_SCREENSET_ID}:menu_items.documentation.label`,
-        icon: 'lucide:book-open',
+        id: IC_DASHBOARD_SCREEN_ID,
+        label: `screenset.${INSIGHT_SCREENSET_ID}:menu_items.ic-dashboard.label`,
+        icon: 'lucide:user-search',
       },
-      screen: () => import('./screens/documentation/DocumentationScreen'),
-    },
-    {
-      menuItem: {
-        id: DASHBOARD_SCREEN_ID,
-        label: `screenset.${INSIGHT_SCREENSET_ID}:menu_items.dashboard.label`,
-        icon: 'lucide:layout-dashboard',
-      },
-      screen: () => import('./screens/dashboard/DashboardScreen'),
-    },
-    {
-      menuItem: {
-        id: SPEED_SCREEN_ID,
-        label: `screenset.${INSIGHT_SCREENSET_ID}:menu_items.speed.label`,
-        icon: 'lucide:gauge',
-      },
-      screen: () => import('./screens/speed/SpeedScreen'),
-    },
-    {
-      menuItem: {
-        id: UIKIT_SCREEN_ID,
-        label: `screenset.${INSIGHT_SCREENSET_ID}:menu_items.uikit.label`,
-        icon: 'lucide:palette',
-      },
-      screen: () => import('./screens/uikit/UIKitElementsScreen'),
+      screen: () => import('./screens/ic-dashboard/IcDashboardScreen'),
     },
   ],
 };
