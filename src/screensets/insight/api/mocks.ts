@@ -32,13 +32,13 @@ import type {
 } from './rawTypes';
 import { METRIC_REGISTRY } from './metricRegistry';
 import {
-  mockExecRows,
   mockTeamMemberRows,
   mockTeamMemberRowsForTeam,
   mockTeamBulletSection,
   mockIcScenario,
   PEOPLE,
 } from './mocks/factories';
+import { PEOPLE_BY_ID, TEAMS, teamMembers } from './mocks/registry';
 
 // Re-export all factory functions for test / story consumers
 export {
@@ -151,19 +151,6 @@ function vary(base: number, index: number, spread: number): number {
   return Math.round((base + factor * spread) * 10) / 10;
 }
 
-/** Apply deterministic variation to a team member row */
-function varyMember(r: RawTeamMemberRow, seed: number): Partial<RawTeamMemberRow> {
-  if (seed === 0) return {};
-  const factor = 0.85 + ((seed % 30) / 100);
-  return {
-    tasks_closed: Math.round(r.tasks_closed * factor),
-    bugs_fixed: Math.round(r.bugs_fixed * factor),
-    prs_merged: Math.max(1, Math.round(r.prs_merged * factor)),
-    focus_time_pct: Math.min(100, Math.round(r.focus_time_pct * (0.95 + (seed % 10) / 100))),
-    ai_loc_share_pct: Math.min(50, Math.round(r.ai_loc_share_pct * (0.9 + (seed % 15) / 100))),
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Caching -- factory-generated scenarios cached per key for session consistency
 // ---------------------------------------------------------------------------
@@ -177,6 +164,101 @@ function cachedIcScenario(personId: string): IcScenarioCache {
     icScenarioCache.set(personId, cached);
   }
   return cached;
+}
+
+// ---------------------------------------------------------------------------
+// Team median computation — real medians from team members' IC scenarios
+// ---------------------------------------------------------------------------
+
+function computeMedian(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? (sorted[mid] ?? 0)
+    : Math.round(((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) * 10) / 20;
+}
+
+/** Cached team medians: teamId → { metric_key → median value } */
+const teamMedianCache = new Map<string, Map<string, number>>();
+
+function getTeamMedians(teamId: string): Map<string, number> {
+  let cached = teamMedianCache.get(teamId);
+  if (cached) return cached;
+
+  const members = teamMembers(teamId);
+  const metricValues = new Map<string, number[]>();
+
+  for (const member of members) {
+    const scenario = cachedIcScenario(member.person_id);
+    for (const rows of Object.values(scenario.bullets)) {
+      for (const row of rows) {
+        let arr = metricValues.get(row.metric_key);
+        if (!arr) { arr = []; metricValues.set(row.metric_key, arr); }
+        arr.push(row.value);
+      }
+    }
+  }
+
+  cached = new Map();
+  for (const [key, values] of metricValues) {
+    cached.set(key, computeMedian(values));
+  }
+  teamMedianCache.set(teamId, cached);
+  return cached;
+}
+
+/** Find person's team_id from registry */
+function personTeam(personId: string): string {
+  return PEOPLE_BY_ID[personId]?.team_id ?? 'backend';
+}
+
+/** Inject real team medians into bullet rows and recompute median_left_pct */
+function applyTeamMedians(rows: RawBulletAggregateRow[], teamId: string): RawBulletAggregateRow[] {
+  const medians = getTeamMedians(teamId);
+  return rows.map((r) => {
+    const realMedian = medians.get(r.metric_key);
+    if (realMedian === undefined) return r;
+
+    // Clone to avoid mutating cached scenario rows
+    const clone = { ...r };
+    const ext = clone as RawBulletAggregateRow & Record<string, unknown>;
+    const rangeMin = parseFloat(String(ext['range_min'] ?? '0').replace(/[^0-9.]/g, '')) || 0;
+    const rangeMax = parseFloat(String(ext['range_max'] ?? '100').replace(/[^0-9.]/g, '')) || 100;
+    const rangeMaxStr = String(ext['range_max'] ?? '');
+    const rangeMinStr = String(ext['range_min'] ?? '');
+    if (rangeMaxStr.endsWith('k') || rangeMaxStr.endsWith('K')) {
+      // handle '18k' → 18000
+      const rmx = parseFloat(rangeMaxStr.replace(/[^0-9.]/g, ''));
+      const rMin = parseFloat(rangeMinStr.replace(/[^0-9.]/g, '')) || 0;
+      const rangeMinK = (rangeMinStr.endsWith('k') || rangeMinStr.endsWith('K')) ? rMin * 1000 : rMin;
+      const rangeMaxK = rmx * 1000;
+      const span = rangeMaxK - rangeMinK;
+      const pct = span > 0 ? Math.round(Math.max(0, Math.min(100, ((realMedian - rangeMinK) / span) * 100))) : 0;
+      ext['median'] = realMedian;
+      ext['median_left_pct'] = pct;
+      // Update label — keep special "Target" labels, replace "Median: X" ones
+      const label = String(ext['median_label'] ?? '');
+      if (label.startsWith('Median:')) {
+        ext['median_label'] = `Median: ${realMedian >= 1000 ? `${Math.round(realMedian / 100) / 10}k` : realMedian}`;
+      }
+    } else {
+      const span = rangeMax - rangeMin;
+      const pct = span > 0 ? Math.round(Math.max(0, Math.min(100, ((realMedian - rangeMin) / span) * 100))) : 0;
+      // Only update median position for real medians, not "Target" markers (median=0 sentinel)
+      if (clone.median !== null && clone.median !== 0) {
+        clone.median = realMedian;
+        ext['median_left_pct'] = pct;
+        const label = String(ext['median_label'] ?? '');
+        if (label.startsWith('Median:')) {
+          const unit = String(ext['unit'] ?? '');
+          const suffix = unit === '%' ? '%' : unit === 'h' || unit === 'h/mo' ? 'h' : '';
+          ext['median_label'] = `Median: ${realMedian}${suffix}`;
+        }
+      }
+    }
+    return clone;
+  });
 }
 
 /** Returns true when the OData filter describes a previous-period range (end date is in the past). */
@@ -365,6 +447,38 @@ export const TEAM_MEMBERS_MONTH: TeamMember[] = mockTeamMemberRows().map((raw) =
 }));
 
 // ---------------------------------------------------------------------------
+// Executive rows -- aggregated from IC scenarios per team
+// ---------------------------------------------------------------------------
+
+function execRowsFromIcScenarios(): RawExecSummaryRow[] {
+  return TEAMS.map((t) => {
+    const members = teamMembers(t.id);
+    const scenarios = members.map((m) => cachedIcScenario(m.person_id).kpiAggregate);
+    const n = scenarios.length || 1;
+    const sum = (fn: (s: typeof scenarios[0]) => number) =>
+      scenarios.reduce((acc, s) => acc + fn(s), 0);
+    const avg = (fn: (s: typeof scenarios[0]) => number) =>
+      Math.round(sum(fn) / n);
+
+    // ai_adoption_pct = % of members with at least one AI tool
+    const aiActiveCount = members.filter((m) => m.ai_tools.length > 0).length;
+
+    return {
+      org_unit_id: t.id,
+      org_unit_name: t.name,
+      headcount: members.length,
+      tasks_closed: sum((s) => s.tasks_closed),
+      bugs_fixed: sum((s) => s.bugs_fixed),
+      build_success_pct: avg((s) => s.build_success_pct ?? 94),
+      focus_time_pct: avg((s) => s.focus_time_pct),
+      ai_adoption_pct: Math.round((aiActiveCount / n) * 100),
+      ai_loc_share_pct: avg((s) => s.ai_loc_share_pct),
+      pr_cycle_time_h: avg((s) => s.pr_cycle_time_h),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Mock map -- POST /api/analytics/v1/metrics/{uuid}/query
 // ---------------------------------------------------------------------------
 
@@ -382,21 +496,38 @@ export const insightMockMap = {
   'GET /api/analytics/v1/dashboard': (): DashboardData => mockDashboardData,
   'GET /api/analytics/v1/speed':     (): SpeedData => mockSpeedData,
 
-  // Executive summary -- returns RawExecSummaryRow[]
-  // Teams and headcount come from registry via mockExecRows()
+  // Executive summary -- aggregated from IC scenario data per team
   [`POST /api/analytics/v1/metrics/${METRIC_REGISTRY.EXEC_SUMMARY}/query`]:
-    (): ODataResponse<RawExecSummaryRow> => wrap(mockExecRows()),
+    (): ODataResponse<RawExecSummaryRow> => wrap(execRowsFromIcScenarios()),
 
-  // Team members -- returns RawTeamMemberRow[] for the requested team only
+  // Team members -- returns RawTeamMemberRow[] for the requested team only.
+  // Metric values are derived from each person's IC scenario (single source of truth).
   [`POST /api/analytics/v1/metrics/${METRIC_REGISTRY.TEAM_MEMBER}/query`]:
     (body: unknown): ODataResponse<RawTeamMemberRow> => {
       const f = odata(body).$filter ?? '';
       const teamId = team(f);
-      const seed = filterSeed(f);
-      return wrap(mockTeamMemberRowsForTeam(teamId).map((r, i) => ({ ...r, ...varyMember(r, seed + i) })));
+      return wrap(mockTeamMemberRowsForTeam(teamId).map((r) => {
+        const scenario = cachedIcScenario(r.person_id);
+        const ic = scenario.kpiAggregate;
+        // dev_time_h is not in kpiAggregate — pull from task_dev_time bullet
+        const devTimeBullet = scenario.bullets['task_delivery']
+          ?.find((b) => b.metric_key === 'task_dev_time');
+        return {
+          ...r,
+          tasks_closed: ic.tasks_closed,
+          bugs_fixed: ic.bugs_fixed,
+          dev_time_h: devTimeBullet ? Math.round(devTimeBullet.value) : r.dev_time_h,
+          prs_merged: ic.prs_merged,
+          build_success_pct: ic.build_success_pct,
+          focus_time_pct: ic.focus_time_pct,
+          ai_loc_share_pct: ic.ai_loc_share_pct,
+        };
+      }));
     },
 
   // Team bullet sections (delivery, quality, collab, AI) -- return RawBulletAggregateRow[]
+  // Values for metrics that have matching IC bullet keys are computed as the team median
+  // from member IC scenarios; others are generated from BULLET_DEFS defaults.
   ...((['TEAM_BULLET_DELIVERY', 'TEAM_BULLET_QUALITY', 'TEAM_BULLET_COLLAB', 'TEAM_BULLET_AI'] as const).reduce<
     Record<string, (body: unknown) => ODataResponse<RawBulletAggregateRow>>
   >((acc, key) => {
@@ -410,8 +541,17 @@ export const insightMockMap = {
     acc[`POST /api/analytics/v1/metrics/${METRIC_REGISTRY[key]}/query`] =
       (body: unknown): ODataResponse<RawBulletAggregateRow> => {
         const f = odata(body).$filter ?? '';
+        const teamId = team(f);
         const seed = filterSeed(f);
-        return wrap(mockTeamBulletSection(sectionId, seed));
+        const rows = mockTeamBulletSection(sectionId, seed);
+        const medians = getTeamMedians(teamId);
+        return wrap(rows.map((r) => {
+          const realMedian = medians.get(r.metric_key);
+          if (realMedian !== undefined) {
+            return { ...r, value: realMedian, median: r.median };
+          }
+          return r;
+        }));
       };
     return acc;
   }, {})),
@@ -449,9 +589,10 @@ export const insightMockMap = {
       (body: unknown): ODataResponse<RawBulletAggregateRow> => {
         const f = odata(body).$filter ?? '';
         const pid = person(f);
+        const tid = personTeam(pid);
         const scenario = cachedIcScenario(pid);
         const items = sectionIds.flatMap((section) => scenario.bullets[section] ?? []);
-        return wrap(items);
+        return wrap(applyTeamMedians(items, tid));
       };
     return acc;
   }, {})),

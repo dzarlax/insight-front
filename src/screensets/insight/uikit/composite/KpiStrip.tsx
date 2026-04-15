@@ -25,6 +25,16 @@ function getPeriodSuffix(unit: string | undefined, period?: string): string {
   return map[period] ?? '';
 }
 
+function getVsLabel(period?: string): string {
+  const map: Record<string, string> = {
+    week: 'vs last wk',
+    month: 'vs last mo',
+    quarter: 'vs last qtr',
+    year: 'vs last yr',
+  };
+  return period ? (map[period] ?? '') : '';
+}
+
 const DELTA_CLASS: Record<string, string> = {
   good: 'bg-green-100 text-green-600',
   warn: 'bg-amber-100 text-amber-600',
@@ -94,7 +104,7 @@ const KpiCell: React.FC<{ kpi: KpiStripKpi; index: number; total: number }> = ({
       {/* Delta badge */}
       {kpi.delta && deltaClass && (
         <Badge className={`mt-1 text-xs font-bold ${deltaClass}`}>
-          {kpi.delta}
+          {kpi.delta}{getVsLabel(kpi.period) ? ` ${getVsLabel(kpi.period)}` : ''}
         </Badge>
       )}
     </div>

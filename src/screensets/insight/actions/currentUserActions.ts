@@ -5,18 +5,13 @@
 
 import { eventBus } from '@hai3/react';
 import { CurrentUserEvents } from '../events/currentUserEvents';
-import { PEOPLE, TEAMS } from '../api/mocks/registry';
 import type { CurrentUser } from '../types';
 
-// Demo users derived from registry — executive + one lead + one IC per team
+// Demo users: executive, Backend team lead, one Backend IC
 export const MOCK_USERS: CurrentUser[] = [
-  { personId: 'p0', name: 'David Park', role: 'executive', teamId: TEAMS[0]?.id ?? '' },
-  ...PEOPLE.map((p) => ({
-    personId: p.person_id,
-    name: p.name,
-    role: (p.is_lead ? 'team_lead' : 'ic') as CurrentUser['role'],
-    teamId: p.team_id,
-  })),
+  { personId: 'p0', name: 'David Park', role: 'executive', teamId: '' },
+  { personId: 'p2', name: 'Bob Park',   role: 'team_lead', teamId: 'backend' },
+  { personId: 'p1', name: 'Alice Kim',  role: 'ic',        teamId: 'backend' },
 ];
 
 export const switchUser = (user: CurrentUser): void => {

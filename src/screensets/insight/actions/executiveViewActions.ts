@@ -43,7 +43,7 @@ export const loadExecutiveView = (period: PeriodValue): void => {
         vals.filter((v): v is T => v !== null);
 
       const buildVals = withValue(teams.map((t) => t.build_success_pct));
-      const bugVals   = withValue(teams.map((t) => t.tasks_closed));
+      const bugVals   = withValue(teams.map((t) => t.bugs_fixed));
       const avg       = (arr: number[]): number | null =>
         arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
 

@@ -6,10 +6,10 @@
 import React, { useEffect, useState } from 'react';
 import { useAppSelector, useNavigation, useScreenTranslations, useTranslation, I18nRegistry, Language } from '@hai3/react';
 import { usePeriod } from '../../hooks/usePeriod';
-import { loadTeamView } from '../../actions/teamViewActions';
+import { loadTeamView, deriveTeamKpis } from '../../actions/teamViewActions';
 import { selectIcPerson } from '../../actions/icDashboardActions';
 import { changePeriod, setDateRange } from '../../actions/periodActions';
-import { selectMembers, selectTeamKpis, selectBulletSections, selectTeamViewLoading, selectTeamName, selectTeamViewConfig, selectSelectedTeamId } from '../../slices/teamViewSlice';
+import { selectMembers, selectBulletSections, selectTeamViewLoading, selectTeamName, selectTeamViewConfig, selectSelectedTeamId } from '../../slices/teamViewSlice';
 import { selectCurrentUser } from '../../slices/currentUserSlice';
 import { selectCustomRange } from '../../slices/periodSlice';
 import { TeamHeroStrip } from './components/TeamHeroStrip';
@@ -68,6 +68,7 @@ const translations = I18nRegistry.createLoader({
 const TeamViewScreen: React.FC = () => {
   useScreenTranslations(INSIGHT_SCREENSET_ID, TEAM_VIEW_SCREEN_ID, translations);
   const { t } = useTranslation();
+  const ns = `screen.${INSIGHT_SCREENSET_ID}.${TEAM_VIEW_SCREEN_ID}`;
   const period = usePeriod();
   const customRange = useAppSelector(selectCustomRange);
   const selectedTeamId = useAppSelector(selectSelectedTeamId);
@@ -79,7 +80,8 @@ const TeamViewScreen: React.FC = () => {
   const members = currentUser.role === 'team_lead'
     ? allMembers.filter((m) => m.person_id !== currentUser.personId)
     : allMembers;
-  const teamKpis = useAppSelector(selectTeamKpis);
+  // KPIs computed from filtered members so counts match the visible table
+  const teamKpis = React.useMemo(() => deriveTeamKpis(members, period), [members, period]);
   const bulletSections = useAppSelector(selectBulletSections);
   const teamName = useAppSelector(selectTeamName);
   const teamViewConfig = useAppSelector(selectTeamViewConfig);
@@ -156,7 +158,7 @@ const TeamViewScreen: React.FC = () => {
               </div>
               <div>
                 <div className="text-base font-bold text-gray-900 leading-tight">{teamName}</div>
-                <div className="text-xs text-gray-400">{t('header.subtitle')}</div>
+                <div className="text-xs text-gray-400">{t(`${ns}:header.subtitle`)}</div>
               </div>
             </>
           )}
