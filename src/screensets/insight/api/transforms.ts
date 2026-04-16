@@ -30,8 +30,8 @@ import type {
   RawDeliveryTrendRow,
   RawTeamMemberRow,
 } from './rawTypes';
-import { BULLET_DEFS, IC_KPI_DEFS } from './thresholdConfig';
-import type { BulletThresholdDef, IcKpiDef } from './thresholdConfig';
+import { BULLET_DEFS, IC_BULLET_DEFS, IC_KPI_DEFS } from './thresholdConfig';
+import type { IcKpiDef } from './thresholdConfig';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -47,18 +47,25 @@ function pctInRange(value: number, rangeMin: number, rangeMax: number): number {
   return Math.round(clamp(((value - rangeMin) / span) * 100, 0, 100));
 }
 
+/**
+ * Status computed from live company percentiles (p25/p75).
+ * good  = top quartile  (above p75 for higher-is-better, below p25 for lower-is-better)
+ * warn  = middle half   (p25–p75)
+ * bad   = bottom quartile
+ */
 function evaluateStatus(
   value: number,
-  def: BulletThresholdDef,
+  p25: number,
+  p75: number,
+  higherIsBetter: boolean,
 ): 'good' | 'warn' | 'bad' {
-  if (def.higher_is_better) {
-    if (value >= def.good_threshold) return 'good';
-    if (value >= def.warn_threshold) return 'warn';
+  if (higherIsBetter) {
+    if (value >= p75) return 'good';
+    if (value >= p25) return 'warn';
     return 'bad';
   }
-  // lower is better
-  if (value <= def.good_threshold) return 'good';
-  if (value <= def.warn_threshold) return 'warn';
+  if (value <= p25) return 'good';
+  if (value <= p75) return 'warn';
   return 'bad';
 }
 
@@ -206,67 +213,68 @@ export function transformIcKpis(
 // 3. Bullet metrics
 // ---------------------------------------------------------------------------
 
+/** Combined lookup: BULLET_DEFS (team) first, then IC_BULLET_DEFS (IC). */
+const ALL_BULLET_DEFS_BY_KEY: Record<string, import('./thresholdConfig').BulletThresholdDef> = keyBy(
+  [...BULLET_DEFS, ...IC_BULLET_DEFS],
+  'metric_key',
+);
+
+function buildMedianLabel(median: number, def: import('./thresholdConfig').BulletThresholdDef): string {
+  if (def.median_label) return def.median_label;
+  const suffix = def.unit === '%' ? '%' : (def.unit === 'h' || def.unit === 'h/mo') ? 'h' : '';
+  if (median >= 1000) return `Median: ${Math.round(median / 100) / 10}k`;
+  return `Median: ${median}${suffix}`;
+}
+
 export function transformBulletMetrics(
   rows: RawBulletAggregateRow[],
   section: string,
   period: PeriodValue,
 ): BulletMetric[] {
-  const defsByKey = keyBy(
-    BULLET_DEFS.filter((d) => d.section === section),
+  const sectionDefs = keyBy(
+    [...BULLET_DEFS, ...IC_BULLET_DEFS].filter((d) => d.section === section),
     'metric_key',
   );
 
-  return rows.map((r) => {
-      const def = defsByKey[r.metric_key];
+  const results: BulletMetric[] = [];
+  for (const r of rows) {
+    const def = sectionDefs[r.metric_key] ?? ALL_BULLET_DEFS_BY_KEY[r.metric_key];
+    if (!def) continue; // unknown metric — skip
 
-      if (!def) {
-        // No matching definition — pass raw row through with defaults.
-        // This handles IC-level bullets whose metric_keys differ from team defs,
-        // and also works when the backend returns pre-formatted BulletMetric shape.
-        const ext = r as unknown as Record<string, unknown>;
-        return {
-          period,
-          section: String(ext['section'] ?? section),
-          metric_key: r.metric_key,
-          label: String(ext['label'] ?? r.metric_key),
-          sublabel: String(ext['sublabel'] ?? ''),
-          value: String(r.value),
-          unit: String(ext['unit'] ?? ''),
-          range_min: String(ext['range_min'] ?? '0'),
-          range_max: String(ext['range_max'] ?? '100'),
-          median: String(r.median ?? ext['median'] ?? ''),
-          median_label: String(ext['median_label'] ?? ''),
-          bar_left_pct: Number(ext['bar_left_pct'] ?? 0),
-          bar_width_pct: Number(ext['bar_width_pct'] ?? pctInRange(r.value, 0, 100)),
-          median_left_pct: Number(ext['median_left_pct'] ?? 0),
-          status: (ext['status'] as BulletMetric['status']) ?? 'good',
-          drill_id: String(ext['drill_id'] ?? ''),
-        };
-      }
+    const rangeMin = r.p5 ?? 0;
+    const rangeMax = r.p95 ?? 100;
+    const span = rangeMax - rangeMin;
 
-      const rangeMin = r.p5 ?? def.range_min;
-      const rangeMax = r.p95 ?? def.range_max;
-      const median = r.median ?? def.median;
+    // Status thresholds: live percentiles; fall back to ±25% of range if unavailable
+    const p25 = r.p25 ?? (rangeMin + span * 0.25);
+    const p75 = r.p75 ?? (rangeMin + span * 0.75);
 
-      return {
-        period,
-        section,
-        metric_key: r.metric_key,
-        label: def.label,
-        sublabel: def.sublabel,
-        value: String(r.value),
-        unit: def.unit,
-        range_min: formatRangeStr(rangeMin, def.unit),
-        range_max: formatRangeStr(rangeMax, def.unit),
-        median: String(median),
-        median_label: `Median: ${median}${def.unit === '%' ? '%' : def.unit === 'h' ? 'h' : ''}`,
-        bar_left_pct: 0,
-        bar_width_pct: pctInRange(r.value, rangeMin, rangeMax),
-        median_left_pct: pctInRange(median, rangeMin, rangeMax),
-        status: evaluateStatus(r.value, def),
-        drill_id: def.drill_id,
-      };
+    const median = r.median ?? 0;
+
+    // Marker: explicit target takes priority; real median next; -1 = no marker
+    const hasMarker = def.target_value !== undefined || r.median !== null;
+    const markerPos = def.target_value ?? median;
+
+    results.push({
+      period,
+      section: def.section,
+      metric_key: r.metric_key,
+      label: def.label,
+      sublabel: def.sublabel,
+      value: String(r.value),
+      unit: def.unit,
+      range_min: formatRangeStr(rangeMin, def.unit),
+      range_max: formatRangeStr(rangeMax, def.unit),
+      median: String(median),
+      median_label: hasMarker ? buildMedianLabel(median, def) : '',
+      bar_left_pct: 0,
+      bar_width_pct: pctInRange(r.value, rangeMin, rangeMax),
+      median_left_pct: hasMarker ? pctInRange(markerPos, rangeMin, rangeMax) : -1,
+      status: evaluateStatus(r.value, p25, p75, def.higher_is_better),
+      drill_id: def.drill_id,
     });
+  }
+  return results;
 }
 
 // ---------------------------------------------------------------------------

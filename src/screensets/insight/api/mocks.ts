@@ -167,7 +167,7 @@ function cachedIcScenario(personId: string): IcScenarioCache {
 }
 
 // ---------------------------------------------------------------------------
-// Team median computation — real medians from team members' IC scenarios
+// Percentile computation — from real generated IC scenarios
 // ---------------------------------------------------------------------------
 
 function computeMedian(values: number[]): number {
@@ -177,6 +177,21 @@ function computeMedian(values: number[]): number {
   return sorted.length % 2 === 1
     ? (sorted[mid] ?? 0)
     : Math.round(((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) * 10) / 20;
+}
+
+type MetricPercentiles = { p5: number; p25: number; p50: number; p75: number; p95: number };
+
+function computePercentiles(values: number[]): MetricPercentiles {
+  if (values.length === 0) return { p5: 0, p25: 0, p50: 0, p75: 0, p95: 0 };
+  const sorted = [...values].sort((a, b) => a - b);
+  const at = (p: number) => {
+    const idx = (p / 100) * (sorted.length - 1);
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    const w = idx - lo;
+    return Math.round(((sorted[lo] ?? 0) * (1 - w) + (sorted[hi] ?? 0) * w) * 10) / 10;
+  };
+  return { p5: at(5), p25: at(25), p50: at(50), p75: at(75), p95: at(95) };
 }
 
 /** Cached team medians: teamId → { metric_key → median value } */
@@ -208,56 +223,143 @@ function getTeamMedians(teamId: string): Map<string, number> {
   return cached;
 }
 
+/**
+ * Percentiles from a specific set of people's IC bullet scenarios.
+ * Reusable for both team-scoped and company-wide distributions.
+ */
+function buildPercentileMap(personIds: string[]): Map<string, MetricPercentiles> {
+  const metricValues = new Map<string, number[]>();
+  for (const pid of personIds) {
+    const scenario = cachedIcScenario(pid);
+    for (const rows of Object.values(scenario.bullets)) {
+      for (const row of rows) {
+        let arr = metricValues.get(row.metric_key);
+        if (!arr) { arr = []; metricValues.set(row.metric_key, arr); }
+        arr.push(row.value);
+      }
+    }
+  }
+  const result = new Map<string, MetricPercentiles>();
+  for (const [key, vals] of metricValues) {
+    result.set(key, computePercentiles(vals));
+  }
+  return result;
+}
+
+/**
+ * Team-level percentiles — used for team bullet status.
+ * Each team contributes ONE data point per metric (its own median),
+ * so we compare teams against other teams — not individuals against individuals.
+ *
+ * For IC-mapped metrics: team value = median of members' IC scenario values.
+ * For team-only metrics (prs_per_dev, active_ai_members, etc.) that have no
+ * IC equivalent: team value = mockTeamBulletSection-generated value per team.
+ */
+let _teamLevelPercentiles: Map<string, MetricPercentiles> | null = null;
+
+function getTeamLevelPercentiles(): Map<string, MetricPercentiles> {
+  if (_teamLevelPercentiles) return _teamLevelPercentiles;
+
+  const metricValues = new Map<string, number[]>();
+  const icCoveredKeys = new Set<string>();
+
+  // IC-mapped metrics: use real team medians (one per team, derived from IC scenarios)
+  for (const t of TEAMS) {
+    for (const [key, value] of getTeamMedians(t.id)) {
+      icCoveredKeys.add(key);
+      let arr = metricValues.get(key);
+      if (!arr) { arr = []; metricValues.set(key, arr); }
+      arr.push(value);
+    }
+  }
+
+  // Team-only metrics: generate one value per team from mockTeamBulletSection
+  const TEAM_SECTIONS = ['task_delivery', 'code_quality', 'estimation', 'ai_adoption', 'collaboration'] as const;
+  for (const t of TEAMS) {
+    const seed = filterSeed(t.id); // stable per team
+    for (const sectionId of TEAM_SECTIONS) {
+      for (const row of mockTeamBulletSection(sectionId, seed)) {
+        if (!icCoveredKeys.has(row.metric_key)) {
+          let arr = metricValues.get(row.metric_key);
+          if (!arr) { arr = []; metricValues.set(row.metric_key, arr); }
+          arr.push(row.value);
+        }
+      }
+    }
+  }
+
+  _teamLevelPercentiles = new Map();
+  for (const [key, vals] of metricValues) {
+    _teamLevelPercentiles.set(key, computePercentiles(vals));
+  }
+  return _teamLevelPercentiles;
+}
+
+/**
+ * Team-scoped percentiles — used for IC bullet STATUS thresholds (p25/p75).
+ * Comparing an individual against teammates, not the whole company.
+ * Teams vary in domain (bug-only, platform, greenfield), so cross-team
+ * comparison would unfairly skew status for specialists.
+ */
+const teamPercentileCache = new Map<string, Map<string, MetricPercentiles>>();
+function getTeamPercentiles(teamId: string): Map<string, MetricPercentiles> {
+  let cached = teamPercentileCache.get(teamId);
+  if (!cached) {
+    const memberIds = teamMembers(teamId).map((m) => m.person_id);
+    cached = buildPercentileMap(memberIds);
+    teamPercentileCache.set(teamId, cached);
+  }
+  return cached;
+}
+
+/**
+ * Company-wide IC percentiles — used for DISPLAY RANGE (p5/p95, axis bounds) only.
+ * All people across all teams → wide, stable range that doesn't collapse
+ * when comparing against a small team of 5–6 members.
+ * Separate from status thresholds, which are team-scoped.
+ */
+let _companyIcPercentiles: Map<string, MetricPercentiles> | null = null;
+function getCompanyIcPercentiles(): Map<string, MetricPercentiles> {
+  if (!_companyIcPercentiles) {
+    _companyIcPercentiles = buildPercentileMap(PEOPLE.map((p) => p.person_id));
+  }
+  return _companyIcPercentiles;
+}
+
 /** Find person's team_id from registry */
 function personTeam(personId: string): string {
   return PEOPLE_BY_ID[personId]?.team_id ?? 'backend';
 }
 
-/** Inject real team medians into bullet rows and recompute median_left_pct */
-function applyTeamMedians(rows: RawBulletAggregateRow[], teamId: string): RawBulletAggregateRow[] {
+/**
+ * Inject percentiles and team median into raw bullet rows.
+ * Clones rows to avoid mutating cached scenario objects.
+ *
+ * @param percentilesMap - company-wide for team bullets, team-scoped for IC bullets
+ */
+/**
+ * Inject display range and status thresholds into IC bullet rows.
+ * - p5/p95 (axis bounds):  company-wide IC distribution → wide, stable
+ * - p25/p75 (status):      team-scoped distribution → fair peer comparison
+ * - median:                team median → "where is my team?"
+ */
+function applyStats(
+  rows: RawBulletAggregateRow[],
+  teamId: string,
+  statusPercentilesMap: Map<string, MetricPercentiles>,
+): RawBulletAggregateRow[] {
   const medians = getTeamMedians(teamId);
+  const companyPcts = getCompanyIcPercentiles();
   return rows.map((r) => {
+    const disp = companyPcts.get(r.metric_key);
+    const stat = statusPercentilesMap.get(r.metric_key);
     const realMedian = medians.get(r.metric_key);
-    if (realMedian === undefined) return r;
-
-    // Clone to avoid mutating cached scenario rows
-    const clone = { ...r };
-    const ext = clone as RawBulletAggregateRow & Record<string, unknown>;
-    const rangeMin = parseFloat(String(ext['range_min'] ?? '0').replace(/[^0-9.]/g, '')) || 0;
-    const rangeMax = parseFloat(String(ext['range_max'] ?? '100').replace(/[^0-9.]/g, '')) || 100;
-    const rangeMaxStr = String(ext['range_max'] ?? '');
-    const rangeMinStr = String(ext['range_min'] ?? '');
-    if (rangeMaxStr.endsWith('k') || rangeMaxStr.endsWith('K')) {
-      // handle '18k' → 18000
-      const rmx = parseFloat(rangeMaxStr.replace(/[^0-9.]/g, ''));
-      const rMin = parseFloat(rangeMinStr.replace(/[^0-9.]/g, '')) || 0;
-      const rangeMinK = (rangeMinStr.endsWith('k') || rangeMinStr.endsWith('K')) ? rMin * 1000 : rMin;
-      const rangeMaxK = rmx * 1000;
-      const span = rangeMaxK - rangeMinK;
-      const pct = span > 0 ? Math.round(Math.max(0, Math.min(100, ((realMedian - rangeMinK) / span) * 100))) : 0;
-      ext['median'] = realMedian;
-      ext['median_left_pct'] = pct;
-      // Update label — keep special "Target" labels, replace "Median: X" ones
-      const label = String(ext['median_label'] ?? '');
-      if (label.startsWith('Median:')) {
-        ext['median_label'] = `Median: ${realMedian >= 1000 ? `${Math.round(realMedian / 100) / 10}k` : realMedian}`;
-      }
-    } else {
-      const span = rangeMax - rangeMin;
-      const pct = span > 0 ? Math.round(Math.max(0, Math.min(100, ((realMedian - rangeMin) / span) * 100))) : 0;
-      // Only update median position for real medians, not "Target" markers (median=0 sentinel)
-      if (clone.median !== null && clone.median !== 0) {
-        clone.median = realMedian;
-        ext['median_left_pct'] = pct;
-        const label = String(ext['median_label'] ?? '');
-        if (label.startsWith('Median:')) {
-          const unit = String(ext['unit'] ?? '');
-          const suffix = unit === '%' ? '%' : unit === 'h' || unit === 'h/mo' ? 'h' : '';
-          ext['median_label'] = `Median: ${realMedian}${suffix}`;
-        }
-      }
-    }
-    return clone;
+    return {
+      ...r,
+      ...(disp && { p5: disp.p5, p95: disp.p95 }),
+      ...(stat && { p25: stat.p25, p75: stat.p75 }),
+      ...(realMedian !== undefined && { median: realMedian }),
+    };
   });
 }
 
@@ -544,13 +646,24 @@ export const insightMockMap = {
         const teamId = team(f);
         const seed = filterSeed(f);
         const rows = mockTeamBulletSection(sectionId, seed);
-        const medians = getTeamMedians(teamId);
+        const teamMedians = getTeamMedians(teamId);
+        const teamLevelPcts = getTeamLevelPercentiles();
+        const companyIcPcts = getCompanyIcPercentiles();
+        // Team bullet:
+        //   p5/p95 (axis):    company IC distribution → wide; fallback to team-level for team-only metrics
+        //   p25/p75 (status): cross-team distribution → compare teams to teams
+        //   value:            this team's median; median marker: cross-team p50
         return wrap(rows.map((r) => {
-          const realMedian = medians.get(r.metric_key);
-          if (realMedian !== undefined) {
-            return { ...r, value: realMedian, median: r.median };
-          }
-          return r;
+          const teamMedian = teamMedians.get(r.metric_key);
+          const tlPcts = teamLevelPcts.get(r.metric_key);
+          const dispPcts = companyIcPcts.get(r.metric_key) ?? tlPcts;
+          return {
+            ...r,
+            ...(dispPcts && { p5: dispPcts.p5, p95: dispPcts.p95 }),
+            ...(tlPcts && { p25: tlPcts.p25, p75: tlPcts.p75 }),
+            ...(teamMedian !== undefined && { value: teamMedian }),
+            median: tlPcts?.p50 ?? null,
+          };
         }));
       };
     return acc;
@@ -592,7 +705,9 @@ export const insightMockMap = {
         const tid = personTeam(pid);
         const scenario = cachedIcScenario(pid);
         const items = sectionIds.flatMap((section) => scenario.bullets[section] ?? []);
-        return wrap(applyTeamMedians(items, tid));
+        // IC status thresholds use team percentiles — compare against teammates,
+        // not the whole company (teams differ too much in domain and tooling).
+        return wrap(applyStats(items, tid, getTeamPercentiles(tid)));
       };
     return acc;
   }, {})),

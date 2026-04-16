@@ -91,5 +91,7 @@ export type RawBulletAggregateRow = {
   value: number;
   median: number | null;
   p5: number | null;
+  p25: number | null;
+  p75: number | null;
   p95: number | null;
 };

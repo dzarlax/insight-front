@@ -25,7 +25,8 @@ export const ProgressTrack: React.FC<ProgressTrackProps> = ({
   const clampPct = (v: number) => Math.max(0, Math.min(100, v));
   const safeLeft   = clampPct(barLeftPct);
   const safeWidth  = Math.min(clampPct(barWidthPct), 100 - safeLeft);
-  const safeMedian = clampPct(medianLeftPct);
+  const showMedian = medianLeftPct >= 0;
+  const safeMedian = showMedian ? clampPct(medianLeftPct) : 0;
 
   return (
     <div className="relative h-5 bg-slate-200 rounded mt-1.5">
@@ -34,11 +35,13 @@ export const ProgressTrack: React.FC<ProgressTrackProps> = ({
         style={{ left: `${safeLeft}%`, width: `${safeWidth}%` }}
         className={`absolute top-[3px] bottom-[3px] rounded-sm transition-[width] duration-500 ease-in-out ${barColorClass}`}
       />
-      {/* Median line */}
-      <div
-        style={{ left: `${safeMedian}%` }}
-        className="absolute w-[2px] -top-0.5 -bottom-0.5 -translate-x-1/2 bg-gray-800/60 rounded"
-      />
+      {/* Median / target line — hidden when medianLeftPct < 0 (no data) */}
+      {showMedian && (
+        <div
+          style={{ left: `${safeMedian}%` }}
+          className="absolute w-[2px] -top-0.5 -bottom-0.5 -translate-x-1/2 bg-gray-800/60 rounded"
+        />
+      )}
     </div>
   );
 };

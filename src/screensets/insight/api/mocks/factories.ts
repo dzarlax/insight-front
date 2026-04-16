@@ -14,7 +14,6 @@ import type {
   RawDeliveryTrendRow,
   RawBulletAggregateRow,
 } from '../rawTypes';
-import { BULLET_DEFS } from '../thresholdConfig';
 
 // ---------------------------------------------------------------------------
 // Utility functions
@@ -43,19 +42,6 @@ function hashStr(s: string): number {
   return Math.abs(h);
 }
 
-/** Parse numeric value from a range string like '0%', '100%', '8h', '31h', '1k', '18k' */
-function parseRangeNum(s: string): number {
-  const num = parseFloat(s.replace(/[^0-9.]/g, ''));
-  if (s.toLowerCase().endsWith('k')) return num * 1000;
-  return isNaN(num) ? 0 : num;
-}
-
-/** Position of value within [min, max] as 0–100 percentage, clamped */
-function barPct(value: number, min: number, max: number): number {
-  const span = max - min;
-  if (span <= 0) return 0;
-  return Math.round(Math.max(0, Math.min(100, ((value - min) / span) * 100)));
-}
 
 // ---------------------------------------------------------------------------
 // Data pools
@@ -65,80 +51,51 @@ import { TEAMS, PEOPLE, teamMembers, teamHeadcount } from './registry';
 export { TEAMS, PEOPLE, teamMembers, teamHeadcount };
 
 // ---------------------------------------------------------------------------
-// IC bullet metric definitions (no BULLET_DEFS entries for these)
+// ---------------------------------------------------------------------------
+// Mock-only value ranges — used only for synthetic data generation.
+// These numbers never appear in the UI; they only seed the vary() function.
+// All display ranges come from p5/p95 computed from the generated data itself.
 // ---------------------------------------------------------------------------
 
-type IcBulletDef = {
-  metric_key: string;
-  section: string;
-  label: string;
-  sublabel: string;
-  unit: string;
-  range_min: string;
-  range_max: string;
-  median: number;
-  median_label: string;
-  bar_width_pct: number;
-  median_left_pct: number;
-  higher_is_better: boolean;
-  drill_id: string;
-  defaultValue: number;
+import { IC_BULLET_DEFS as IC_DEFS_CONFIG, BULLET_DEFS as TEAM_DEFS_CONFIG } from '../thresholdConfig';
+
+/** [min, max] generation bounds for each metric_key, mock only. */
+const MOCK_RANGES: Record<string, [number, number]> = {
+  // task_delivery
+  tasks_completed: [2, 15], task_dev_time: [8, 31], estimation_accuracy: [0, 3],
+  task_reopen_rate: [0, 15], due_date_compliance: [40, 100],
+  // git_output
+  commits: [8, 55], prs_created: [2, 14], prs_merged: [0, 20], clean_loc: [1000, 18000],
+  // code_quality
+  reviews_given: [0, 20], rework_ratio: [0, 50], build_success: [70, 100],
+  pr_cycle_time: [0, 72], pickup_time: [0, 48], bugs_fixed: [0, 30],
+  bug_reopen_rate: [0, 30], prs_per_dev: [0, 20],
+  // ai_tools
+  cursor_completions: [200, 5000], cursor_agents: [2, 40], cursor_lines: [0, 5000],
+  cc_sessions: [0, 60], cc_tool_accept: [0, 100], cc_lines: [0, 3000],
+  ai_loc_share2: [0, 34], claude_web: [0, 80], chatgpt: [0, 40],
+  // ai_adoption (team)
+  active_ai_members: [0, 12], cursor_active: [0, 12], cc_active: [0, 12],
+  codex_active: [0, 12], team_ai_loc: [0, 50], cursor_acceptance: [0, 100],
+  cc_tool_acceptance: [0, 100],
+  // estimation (team)
+  overrun_ratio: [1, 3], scope_completion: [0, 100], scope_creep: [0, 50],
+  on_time_delivery: [0, 100], avg_slip: [0, 6],
+  // collab
+  slack_thread_participation: [0, 80], slack_message_engagement: [0, 5],
+  slack_dm_ratio: [0, 100], m365_teams_messages: [0, 400], m365_emails_sent: [0, 120],
+  m365_files_shared: [0, 30], meeting_hours: [4, 28], zoom_calls: [0, 20],
+  meeting_free: [0, 10],
 };
 
-/** Compute IC bullet status by comparing value to median. Falls back to 'good' when median is 0. */
-function icBulletStatus(value: number, median: number, higherIsBetter: boolean): 'good' | 'warn' | 'bad' {
-  if (median === 0) return 'good';
-  if (higherIsBetter) {
-    if (value >= median * 0.9) return 'good';
-    if (value >= median * 0.7) return 'warn';
-    return 'bad';
-  }
-  if (value <= median * 1.15) return 'good';
-  if (value <= median * 1.40) return 'warn';
-  return 'bad';
-}
-
-const IC_BULLET_DEFS: IcBulletDef[] = [
-  // task_delivery
-  { metric_key: 'tasks_completed',    section: 'task_delivery', label: 'Tasks Completed',          sublabel: 'Jira \u00b7 closed issues in sprint',                                          unit: 'count',  range_min: '0',    range_max: '15',   median: 7,    median_label: 'Median: 7',                          bar_width_pct: 80, median_left_pct: 47, higher_is_better: true,  drill_id: 'tasks-completed', defaultValue: 12  },
-  { metric_key: 'task_dev_time',      section: 'task_delivery', label: 'Task Development Time',     sublabel: 'Jira \u00b7 time in In Progress state \u00b7 lower = better',                 unit: 'h',      range_min: '8h',   range_max: '31h',  median: 15,   median_label: 'Median: 15h',                        bar_width_pct: 26, median_left_pct: 30, higher_is_better: false, drill_id: 'cycle-time',      defaultValue: 14  },
-  { metric_key: 'estimation_accuracy',section: 'task_delivery', label: 'Estimation Accuracy',       sublabel: 'Jira \u00b7 tasks within \u00b120% of original estimate',                    unit: '\u00d7', range_min: '0\u00d7', range_max: '3\u00d7', median: 0, median_label: 'Target 0.9\u20131.3\u00d7',          bar_width_pct: 37, median_left_pct: 37, higher_is_better: true,  drill_id: '',                defaultValue: 1.1 },
-  { metric_key: 'task_reopen_rate',   section: 'task_delivery', label: 'Task Reopen Rate',          sublabel: 'Jira \u00b7 closed then reopened within 14 days \u00b7 lower = better',       unit: '%',      range_min: '0%',   range_max: '15%',  median: 5,    median_label: 'Median: 5%',                         bar_width_pct: 27, median_left_pct: 33, higher_is_better: false, drill_id: 'task-reopen',     defaultValue: 4   },
-  { metric_key: 'due_date_compliance',section: 'task_delivery', label: 'Due Date Compliance',       sublabel: 'Jira \u00b7 tasks closed by due date',                                       unit: '%',      range_min: '40%',  range_max: '100%', median: 72,   median_label: 'Median: 72%',                        bar_width_pct: 87, median_left_pct: 53, higher_is_better: true,  drill_id: '',                defaultValue: 92  },
-  // git_output
-  { metric_key: 'commits',            section: 'git_output',    label: 'Commits Created',           sublabel: 'Bitbucket \u00b7 commits authored',                                          unit: 'count',  range_min: '8',    range_max: '55',   median: 22,   median_label: 'Median: 22',                         bar_width_pct: 55, median_left_pct: 30, higher_is_better: true,  drill_id: 'commits',         defaultValue: 34  },
-  { metric_key: 'prs_created',        section: 'git_output',    label: 'Pull Requests Created',     sublabel: 'Bitbucket \u00b7 PRs authored',                                              unit: 'count',  range_min: '2',    range_max: '14',   median: 6,    median_label: 'Median: 6',                          bar_width_pct: 75, median_left_pct: 33, higher_is_better: true,  drill_id: 'pull-requests',   defaultValue: 11  },
-  { metric_key: 'prs_merged',         section: 'git_output',    label: 'Pull Requests Merged',      sublabel: 'Bitbucket \u00b7 authored and merged',                                       unit: 'count',  range_min: '0',    range_max: '20',   median: 6,    median_label: 'Median: 6',                          bar_width_pct: 45, median_left_pct: 30, higher_is_better: true,  drill_id: '',                defaultValue: 9   },
-  { metric_key: 'clean_loc',          section: 'git_output',    label: 'Clean LOC',                 sublabel: 'Bitbucket \u00b7 lines added \u00b7 excl. spec/config',                     unit: 'count',  range_min: '1k',   range_max: '18k',  median: 7000, median_label: 'Median: 7k',                         bar_width_pct: 65, median_left_pct: 35, higher_is_better: true,  drill_id: '',                defaultValue: 12000 },
-  // code_quality
-  { metric_key: 'reviews_given',      section: 'code_quality',  label: 'Reviews Given',             sublabel: 'Bitbucket \u00b7 PRs reviewed',                                              unit: 'count',  range_min: '0',    range_max: '20',   median: 8,    median_label: 'Median: 8',                          bar_width_pct: 70, median_left_pct: 40, higher_is_better: true,  drill_id: 'reviews',         defaultValue: 14  },
-  { metric_key: 'rework_ratio',       section: 'code_quality',  label: 'Rework Ratio',              sublabel: 'Bitbucket \u00b7 lines changed in follow-up commits \u00b7 lower = better',  unit: '%',      range_min: '0%',   range_max: '50%',  median: 0,    median_label: 'Target <20%',                        bar_width_pct: 24, median_left_pct: 40, higher_is_better: false, drill_id: '',                defaultValue: 12  },
-  { metric_key: 'build_success',      section: 'code_quality',  label: 'Build Success Rate',        sublabel: 'CI \u00b7 passed \u00f7 total runs \u00b7 target \u226590%',                unit: '%',      range_min: '0%',   range_max: '100%', median: 87,   median_label: 'Target \u226590% \u00b7 Median: 87%', bar_width_pct: 94, median_left_pct: 87, higher_is_better: true,  drill_id: 'builds',          defaultValue: 94  },
-  { metric_key: 'pr_cycle_time',      section: 'code_quality',  label: 'Pull Request Cycle Time',   sublabel: 'Bitbucket \u00b7 PR opened \u2192 merged \u00b7 lower = better',            unit: 'h',      range_min: '0h',   range_max: '72h',  median: 24,   median_label: 'Median: 24h',                        bar_width_pct: 25, median_left_pct: 33, higher_is_better: false, drill_id: 'pull-requests',   defaultValue: 18  },
-  { metric_key: 'pickup_time',        section: 'code_quality',  label: 'Pickup Time',               sublabel: 'Bitbucket \u00b7 PR opened \u2192 first review \u00b7 lower = better',      unit: 'h',      range_min: '0h',   range_max: '48h',  median: 0,    median_label: 'Target <24h',                        bar_width_pct:  9, median_left_pct: 50, higher_is_better: false, drill_id: '',                defaultValue: 4.2 },
-  { metric_key: 'bugs_fixed',         section: 'code_quality',  label: 'Bugs Fixed',                sublabel: 'Jira \u00b7 bug-type issues closed',                                        unit: 'count',  range_min: '0',    range_max: '30',   median: 9,    median_label: 'Median: 9',                          bar_width_pct: 77, median_left_pct: 30, higher_is_better: true,  drill_id: 'bugs-fixed',      defaultValue: 23  },
-  { metric_key: 'bug_reopen_rate',    section: 'code_quality',  label: 'Bug Reopen Rate',           sublabel: 'Jira \u00b7 bugs reopened \u00b7 lower = better',                           unit: '%',      range_min: '0%',   range_max: '30%',  median: 14,   median_label: 'Median: 14% \u00b7 Target <15%',     bar_width_pct: 30, median_left_pct: 47, higher_is_better: false, drill_id: '',                defaultValue: 9   },
-  // ai_tools
-  { metric_key: 'cursor_completions', section: 'ai_tools',      label: 'Cursor Completions',        sublabel: 'Cursor \u00b7 completions suggested this month',                             unit: 'count',  range_min: '200',  range_max: '5k',   median: 800,  median_label: 'Median: 800',                        bar_width_pct: 21, median_left_pct: 13, higher_is_better: true,  drill_id: '',                defaultValue: 1200 },
-  { metric_key: 'cursor_agents',      section: 'ai_tools',      label: 'Cursor Agent Sessions',     sublabel: 'Cursor \u00b7 agentic sessions started',                                    unit: 'count',  range_min: '2',    range_max: '40',   median: 10,   median_label: 'Median: 10',                         bar_width_pct: 42, median_left_pct: 21, higher_is_better: true,  drill_id: '',                defaultValue: 18  },
-  { metric_key: 'cursor_lines',       section: 'ai_tools',      label: 'Lines Accepted',            sublabel: 'Cursor \u00b7 lines of code accepted',                                      unit: 'count',  range_min: '0',    range_max: '5k',   median: 1800, median_label: 'Median: 1.8k',                       bar_width_pct: 64, median_left_pct: 36, higher_is_better: true,  drill_id: '',                defaultValue: 3200 },
-  { metric_key: 'cc_sessions',        section: 'ai_tools',      label: 'Claude Code Sessions',      sublabel: 'Anthropic Enterprise API \u00b7 sessions this month',                       unit: 'count',  range_min: '0',    range_max: '60',   median: 12,   median_label: 'Median: 12',                         bar_width_pct: 40, median_left_pct: 20, higher_is_better: true,  drill_id: '',                defaultValue: 24  },
-  { metric_key: 'cc_tool_accept',     section: 'ai_tools',      label: 'Tool Acceptance Rate',      sublabel: 'Anthropic Enterprise API \u00b7 accepted \u00f7 offered',                   unit: '%',      range_min: '0%',   range_max: '100%', median: 64,   median_label: 'Median: 64%',                        bar_width_pct: 76, median_left_pct: 64, higher_is_better: true,  drill_id: '',                defaultValue: 76  },
-  { metric_key: 'cc_lines',           section: 'ai_tools',      label: 'Lines Added (Claude Code)', sublabel: 'Anthropic Enterprise API \u00b7 lines added by Claude Code',                unit: 'count',  range_min: '0',    range_max: '3k',   median: 600,  median_label: 'Median: 600',                        bar_width_pct: 37, median_left_pct: 20, higher_is_better: true,  drill_id: '',                defaultValue: 1100 },
-  { metric_key: 'ai_loc_share2',      section: 'ai_tools',      label: 'AI LOC Share',              sublabel: 'Cursor + Claude Code \u00b7 accepted lines \u00f7 clean LOC',              unit: '%',      range_min: '0%',   range_max: '34%',  median: 18,   median_label: 'Median: 18%',                        bar_width_pct: 79, median_left_pct: 53, higher_is_better: true,  drill_id: '',                defaultValue: 27  },
-  { metric_key: 'claude_web',         section: 'ai_tools',      label: 'Claude Web Usage',          sublabel: 'Claude Web \u00b7 conversations this month',                                unit: 'count',  range_min: '0',    range_max: '80',   median: 18,   median_label: 'Median: 18',                         bar_width_pct: 40, median_left_pct: 23, higher_is_better: true,  drill_id: '',                defaultValue: 32  },
-  { metric_key: 'chatgpt',            section: 'ai_tools',      label: 'ChatGPT Usage',             sublabel: 'ChatGPT \u00b7 conversations this month',                                   unit: 'count',  range_min: '0',    range_max: '40',   median: 12,   median_label: 'Median: 12',                         bar_width_pct: 20, median_left_pct: 30, higher_is_better: true,  drill_id: '',                defaultValue: 8   },
-  // collab
-  { metric_key: 'slack_thread_participation', section: 'collab', label: 'Thread Participation',    sublabel: 'Slack \u00b7 replies to others\' threads',                                   unit: 'replies', range_min: '0',   range_max: '80',   median: 29,   median_label: 'Median: 29',                         bar_width_pct: 43, median_left_pct: 36, higher_is_better: true,  drill_id: '',                defaultValue: 34  },
-  { metric_key: 'slack_message_engagement',   section: 'collab', label: 'Message Engagement',      sublabel: 'Slack \u00b7 avg replies per thread',                                        unit: 'avg',    range_min: '0',    range_max: '5',    median: 1.8,  median_label: 'Median: 1.8',                        bar_width_pct: 42, median_left_pct: 36, higher_is_better: true,  drill_id: '',                defaultValue: 2.1 },
-  { metric_key: 'slack_dm_ratio',     section: 'collab',         label: 'DM Ratio',                 sublabel: 'Slack \u00b7 DMs \u00f7 all messages \u00b7 lower = more open',             unit: '%',      range_min: '0%',   range_max: '100%', median: 28,   median_label: 'Median: 28% \u00b7 lower = more open', bar_width_pct: 24, median_left_pct: 28, higher_is_better: false, drill_id: '',                defaultValue: 24  },
-  { metric_key: 'm365_teams_messages',section: 'collab',         label: 'Teams Messages',           sublabel: 'Microsoft Teams \u00b7 all channels sent',                                  unit: '/mo',    range_min: '0',    range_max: '400',  median: 148,  median_label: 'Median: 148',                        bar_width_pct: 42, median_left_pct: 37, higher_is_better: true,  drill_id: '',                defaultValue: 168 },
-  { metric_key: 'm365_emails_sent',   section: 'collab',         label: 'Emails Sent',              sublabel: 'M365 \u00b7 avg per member \u00b7 lower = better',                          unit: '/mo',    range_min: '0',    range_max: '120',  median: 35,   median_label: 'Median: 35 \u00b7 lower = better',    bar_width_pct: 26, median_left_pct: 29, higher_is_better: false, drill_id: '',                defaultValue: 31  },
-  { metric_key: 'm365_files_shared',  section: 'collab',         label: 'Files Shared',             sublabel: 'M365 \u00b7 avg per member',                                                unit: '/mo',    range_min: '0',    range_max: '30',   median: 8,    median_label: 'Median: 8',                          bar_width_pct: 30, median_left_pct: 27, higher_is_better: true,  drill_id: '',                defaultValue: 9   },
-  { metric_key: 'meeting_hours',      section: 'collab',         label: 'Meeting Hours',            sublabel: 'Zoom \u00b7 meeting duration + M365 audioDuration \u00b7 lower = more focus time', unit: 'h/mo', range_min: '4h', range_max: '28h', median: 16,  median_label: 'Median: 16h',                        bar_width_pct: 33, median_left_pct: 50, higher_is_better: false, drill_id: '',                defaultValue: 12  },
-  { metric_key: 'zoom_calls',         section: 'collab',         label: 'Zoom Calls',               sublabel: 'Zoom API \u00b7 avg calls attended per member',                              unit: '/mo',    range_min: '0',    range_max: '20',   median: 9,    median_label: 'Median: 9',                          bar_width_pct: 55, median_left_pct: 45, higher_is_better: true,  drill_id: '',                defaultValue: 11  },
-  { metric_key: 'meeting_free',       section: 'collab',         label: 'Meeting-Free Days',        sublabel: 'Zoom \u00b7 days with no meetings + M365 \u00b7 avg \u00b7 higher = better', unit: 'days',   range_min: '0',    range_max: '10',   median: 4,    median_label: 'Median: 4',                          bar_width_pct: 50, median_left_pct: 40, higher_is_better: true,  drill_id: '',                defaultValue: 5   },
-];
+type IcMockDefault = { defaultValue: number; unit: string };
+const IC_MOCK_DEFAULTS: Record<string, IcMockDefault> = Object.fromEntries(
+  IC_DEFS_CONFIG.map((d) => {
+    const [min, max] = MOCK_RANGES[d.metric_key] ?? [0, 100];
+    const defaultValue = Math.round((min + (max - min) * 0.65) * 10) / 10;
+    return [d.metric_key, { defaultValue, unit: d.unit }];
+  }),
+);
 
 // IC sections -> metric keys mapping
 const IC_SECTIONS: Record<string, string[]> = {
@@ -228,6 +185,8 @@ export function mockBulletRow(overrides?: Partial<RawBulletAggregateRow>): RawBu
     value: 5.3,
     median: 5.8,
     p5: null,
+    p25: null,
+    p75: null,
     p95: null,
     ...overrides,
   };
@@ -336,34 +295,31 @@ export function mockDeliveryTrendSeries(
  * Returns RawBulletAggregateRow[] for the given section.
  */
 export function mockTeamBulletSection(section: string, seed = 0): RawBulletAggregateRow[] {
-  return BULLET_DEFS
+  return TEAM_DEFS_CONFIG
     .filter((d) => d.section === section)
     .map((d, i) => {
-      const raw = Math.round(vary(d.median, i + seed, d.median * 0.3) * 10) / 10;
-      // Clamp % to 0-100 (not to range_max which can be <100), others to range
-      const clamped = d.unit === '%'
-        ? Math.min(100, Math.max(0, raw))
-        : Math.min(d.range_max, Math.max(d.range_min, raw));
+      const [min, max] = MOCK_RANGES[d.metric_key] ?? [0, 100];
+      const span = max - min;
+      const center = min + span * 0.65;
+      const raw = Math.round(vary(center, i + seed, span * 0.2) * 10) / 10;
+      const clamped = d.unit === '%' ? Math.min(100, Math.max(0, raw)) : Math.min(max, Math.max(min, raw));
       const value = INTEGER_UNITS.has(d.unit) ? Math.round(clamped) : clamped;
       return {
         metric_key: d.metric_key,
         value,
-        median: d.median,
-        p5: d.range_min,
-        p95: d.range_max,
+        median: null, // injected by handler
+        p5: null,     // injected by handler from cross-team distribution
+        p25: null,
+        p75: null,
+        p95: null,
       };
     });
 }
 
 // ---------------------------------------------------------------------------
-// IC bullet sections (with passthrough display fields)
+// IC bullet sections — raw data only (display fields computed by transforms)
 // ---------------------------------------------------------------------------
 
-/**
- * IC bullet section -- uses IC_BULLET_DEFS (no BULLET_DEFS entries).
- * Returns RawBulletAggregateRow with passthrough display fields that
- * transforms.ts reads via `Record<string,unknown>` cast.
- */
 const INTEGER_UNITS = new Set(['count', 'tasks', '/mo', '/ 12', 'replies', 'days', '%', '']);
 
 export function mockIcBulletSection(
@@ -375,15 +331,9 @@ export function mockIcBulletSection(
   if (!keys) return [];
 
   return keys.map((key, i) => {
-    const def = IC_BULLET_DEFS.find((d) => d.metric_key === key);
+    const def = IC_MOCK_DEFAULTS[key];
     if (!def) {
-      return {
-        metric_key: key,
-        value: 0,
-        median: null,
-        p5: null,
-        p95: null,
-      };
+      return { metric_key: key, value: 0, median: null, p5: null, p25: null, p75: null, p95: null };
     }
 
     const overridden = Object.prototype.hasOwnProperty.call(valueOverrides, key);
@@ -393,34 +343,15 @@ export function mockIcBulletSection(
     const clamped = def.unit === '%' ? Math.min(100, Math.max(0, rawValue)) : rawValue;
     const value = INTEGER_UNITS.has(def.unit) ? Math.round(clamped) : clamped;
 
-    // Build the base raw row
-    const row: RawBulletAggregateRow = {
-      metric_key: def.metric_key,
+    return {
+      metric_key: key,
       value,
-      median: def.median ?? null,
-      p5: null,
+      median: null, // injected by handler
+      p5: null,     // injected by handler from team distribution
+      p25: null,
+      p75: null,
       p95: null,
     };
-
-    // Attach passthrough display fields that transforms.ts reads
-    // when no BULLET_DEFS match is found (the IC-level path)
-    const ext = row as RawBulletAggregateRow & Record<string, unknown>;
-    ext['section'] = def.section;
-    ext['label'] = def.label;
-    ext['sublabel'] = def.sublabel;
-    ext['unit'] = def.unit;
-    ext['range_min'] = def.range_min;
-    ext['range_max'] = def.range_max;
-    ext['median_label'] = def.median_label;
-    const rMin = parseRangeNum(def.range_min);
-    const rMax = parseRangeNum(def.range_max);
-    ext['bar_left_pct'] = 0;
-    ext['bar_width_pct'] = barPct(value, rMin, rMax);
-    ext['median_left_pct'] = def.median === 0 ? def.median_left_pct : barPct(def.median, rMin, rMax);
-    ext['status'] = icBulletStatus(value, def.median, def.higher_is_better);
-    ext['drill_id'] = def.drill_id;
-
-    return row;
   });
 }
 
