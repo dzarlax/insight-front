@@ -1,60 +1,31 @@
 /**
  * ConnectorManagerService
  *
- * Fetches connector availability from the Connector Manager API.
+ * Connector Manager service is not available in the current deployment.
+ * All connectors are reported as 'available' so null fields from the
+ * Analytics API render as "—" rather than "Not configured".
+ *
+ * TODO: Wire up real Connector Manager when the service is deployed.
  * Spec: GET /api/connectors/v1/connections/{id}/status
  * See: docs/components/backend/specs/analytics-views-api.md §8
  */
 
-import { BaseApiService, RestProtocol, RestMockPlugin, apiRegistry } from '@hai3/react';
-import type { MockMap } from '@hai3/react';
-import { AuthPlugin } from '@/app/plugins/AuthPlugin';
-import type { DataAvailability, ConnectorAvailability, ConnectorStatus } from '../types';
+import { BaseApiService, RestProtocol, apiRegistry } from '@hai3/react';
+import type { DataAvailability } from '../types';
 
 type ConnectionId = keyof DataAvailability;
 
 const CONNECTION_IDS: ConnectionId[] = ['git', 'tasks', 'ci', 'comms', 'hr', 'ai'];
 
-// ---------------------------------------------------------------------------
-// Mock data
-// ---------------------------------------------------------------------------
-
-const MOCK_CONNECTOR_STATUS: MockMap = Object.fromEntries(
-  CONNECTION_IDS.map((id): [string, () => ConnectorStatus] => [
-    `GET /api/connectors/v1/connections/${id}/status`,
-    () => ({ id, name: id, status: 'available' as ConnectorAvailability }),
-  ]),
-);
-
-// ---------------------------------------------------------------------------
-// Service
-// ---------------------------------------------------------------------------
-
 export class ConnectorManagerService extends BaseApiService {
   constructor() {
-    const restProtocol = new RestProtocol();
-    super({ baseURL: '/api/connectors/v1' }, restProtocol);
-    this.registerPlugin(
-      restProtocol,
-      new RestMockPlugin({ mockMap: MOCK_CONNECTOR_STATUS, delay: 50 }),
-    );
-    restProtocol.plugins.add(new AuthPlugin());
+    super({ baseURL: '/api/connectors/v1' }, new RestProtocol());
   }
 
-  /** Fetches availability for all known connectors in parallel. */
+  /** Returns 'available' for all connectors — no real API call. */
   async getDataAvailability(): Promise<DataAvailability> {
-    const settled = await Promise.allSettled(
-      CONNECTION_IDS.map((id) =>
-        this.protocol(RestProtocol).get<ConnectorStatus>(`/connections/${id}/status`),
-      ),
-    );
     return Object.fromEntries(
-      CONNECTION_IDS.map((id, i) => {
-        const result = settled[i];
-        const status: ConnectorAvailability =
-          result?.status === 'fulfilled' ? result.value.status : 'no-connector';
-        return [id, status];
-      }),
+      CONNECTION_IDS.map((id) => [id, 'available']),
     ) as DataAvailability;
   }
 }
