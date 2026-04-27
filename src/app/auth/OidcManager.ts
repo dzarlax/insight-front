@@ -144,7 +144,7 @@ export const OidcManager = {
       sessionStorage.clear();
       Object.keys(localStorage)
         .filter((k) => k.startsWith('oidc.') || k.startsWith('auth.'))
-        .forEach((k) => localStorage.removeItem(k));
+        .forEach((k) => { localStorage.removeItem(k); });
     } catch { /* storage unavailable */ }
     await userManager.signoutRedirect({ id_token_hint: user?.id_token });
   },
