@@ -12,9 +12,15 @@ fi
 # be tight (specific host) instead of broad `https:`. Falls back to `https:` if
 # OIDC_ISSUER is not set, keeping the build usable without runtime config.
 if [ -n "$OIDC_ISSUER" ]; then
-  # Strip path and trailing slash to get just `scheme://host[:port]`.
-  OIDC_ORIGIN=$(echo "$OIDC_ISSUER" | sed -E 's|^([a-z]+://[^/]+).*|\1|')
-  CSP_REMOTE="$OIDC_ORIGIN"
+  # Strip path/query to get just `scheme://host[:port]`. Validate that the
+  # input actually looks like a URL — if not, fall back to `https:` rather
+  # than splatting a malformed value into the CSP header.
+  if echo "$OIDC_ISSUER" | grep -qE '^[A-Za-z][A-Za-z0-9+.-]*://[^[:space:]/]+'; then
+    CSP_REMOTE=$(echo "$OIDC_ISSUER" | sed -E 's|^([A-Za-z][A-Za-z0-9+.-]*://[^/]+).*|\1|')
+  else
+    echo "WARN: OIDC_ISSUER='$OIDC_ISSUER' is not a well-formed URL — using https: in CSP"
+    CSP_REMOTE="https:"
+  fi
 else
   CSP_REMOTE="https:"
 fi

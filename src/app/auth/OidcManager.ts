@@ -135,11 +135,16 @@ export const OidcManager = {
     // in the end_session request and signoutRedirect would otherwise read it
     // from the now-empty user store.
     const user = await userManager.getUser();
-    // Defense in depth: drop any non-OIDC keys app code may have stashed.
-    // signoutRedirect re-populates its own state after this clear.
+    // Defense in depth: drop any auth-related storage. signoutRedirect
+    // re-populates its own state after this clear. We clear all of
+    // sessionStorage (oidc-client-ts uses it for the user store and we don't
+    // store unrelated long-lived state there) but only auth-prefixed keys in
+    // localStorage so we don't nuke unrelated app state (theme, prefs, etc.).
     try {
       sessionStorage.clear();
-      localStorage.clear();
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('oidc.') || k.startsWith('auth.'))
+        .forEach((k) => localStorage.removeItem(k));
     } catch { /* storage unavailable */ }
     await userManager.signoutRedirect({ id_token_hint: user?.id_token });
   },

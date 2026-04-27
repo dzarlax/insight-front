@@ -13,8 +13,10 @@ interface State {
  * generic fallback so the app does not crash to a blank screen — and so stack
  * traces never bleed into the DOM in production.
  *
- * Detailed error info is forwarded to the console only in dev. In production,
- * wire this up to a remote error reporter (Sentry, etc.) when one is added.
+ * In dev: logs the full error with component stack to the console.
+ * In prod: logs only `error.message` so operators can correlate user reports
+ * to a sanitized trace without leaking source paths. Wire this up to a remote
+ * error reporter (Sentry, etc.) when one is added.
  */
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
@@ -26,6 +28,8 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo): void {
     if (import.meta.env.DEV) {
       console.error('[ErrorBoundary]', error, info.componentStack);
+    } else {
+      console.error('[ErrorBoundary]', error.message);
     }
   }
 
@@ -34,31 +38,19 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <div
         role="alert"
-        style={{
-          padding: '2rem',
-          fontFamily: 'system-ui, sans-serif',
-          maxWidth: '32rem',
-          margin: '4rem auto',
-          textAlign: 'center',
-        }}
+        className="max-w-lg mx-auto mt-16 p-8 text-center bg-background text-foreground"
       >
-        <h1 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>
-          Something went wrong
-        </h1>
-        <p style={{ color: '#666', marginBottom: '1.5rem' }}>
+        <h1 className="text-xl mb-4">Something went wrong</h1>
+        <p className="text-muted-foreground mb-6">
           The application encountered an unexpected error. Please reload the
           page. If the problem persists, contact your administrator.
         </p>
         <button
           type="button"
-          onClick={() => window.location.reload()}
-          style={{
-            padding: '0.5rem 1rem',
-            border: '1px solid #ccc',
-            borderRadius: '0.25rem',
-            background: '#fff',
-            cursor: 'pointer',
+          onClick={() => {
+            window.location.reload();
           }}
+          className="px-4 py-2 border border-border rounded bg-background text-foreground cursor-pointer hover:bg-muted"
         >
           Reload
         </button>
