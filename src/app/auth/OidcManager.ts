@@ -109,7 +109,6 @@ export const OidcManager = {
     await OidcManager.init();
     if (!userManager) return;
 
-    sessionStorage.setItem('__debug_signIn_called', Date.now().toString());
     await userManager.signinRedirect({
       state: { returnUrl: window.location.pathname + window.location.search } satisfies OidcSigninState,
     });
@@ -132,6 +131,16 @@ export const OidcManager = {
   /** RP-initiated logout at OIDC provider */
   async signOut(): Promise<void> {
     if (!userManager) return;
-    await userManager.signoutRedirect();
+    // Capture id_token before clearing storage — some IdPs require id_token_hint
+    // in the end_session request and signoutRedirect would otherwise read it
+    // from the now-empty user store.
+    const user = await userManager.getUser();
+    // Defense in depth: drop any non-OIDC keys app code may have stashed.
+    // signoutRedirect re-populates its own state after this clear.
+    try {
+      sessionStorage.clear();
+      localStorage.clear();
+    } catch { /* storage unavailable */ }
+    await userManager.signoutRedirect({ id_token_hint: user?.id_token });
   },
 };
