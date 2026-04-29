@@ -1,5 +1,5 @@
 map $sent_http_content_type $csp_header {
-    default "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ${CSP_REMOTE}; frame-src 'self' ${CSP_REMOTE}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'";
+    default "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ${CSP_REMOTE}; frame-src 'self' ${CSP_REMOTE}; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'";
 }
 
 server {
