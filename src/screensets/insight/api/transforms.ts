@@ -53,11 +53,14 @@ function pctInRange(value: number, rangeMin: number, rangeMax: number): number {
 }
 
 function formatValue(raw: number, fmt: IcKpiDef['format']): string {
+  // Whole-number display across the board. Fractional precision was noisy on
+  // a dashboard that re-aggregates per period — "78.4%" jitters to "78.6%"
+  // when the period nudges by a day. Integers stay readable and stable.
   switch (fmt) {
     case 'integer': return String(Math.round(raw));
-    case 'decimal1': return raw.toFixed(1);
+    case 'decimal1': return String(Math.round(raw));
     case 'percent': return String(Math.round(raw));
-    case 'hours': return `${raw.toFixed(1)}h`;
+    case 'hours': return `${Math.round(raw)}h`;
   }
 }
 
@@ -68,9 +71,9 @@ function formatDelta(
   const sign = delta > 0 ? '+' : '';
   switch (def.format) {
     case 'integer': return `${sign}${Math.round(delta)}`;
-    case 'decimal1': return `${sign}${delta.toFixed(1)}`;
+    case 'decimal1': return `${sign}${Math.round(delta)}`;
     case 'percent': return `${sign}${Math.round(delta)}%`;
-    case 'hours': return `${sign}${delta.toFixed(1)}h`;
+    case 'hours': return `${sign}${Math.round(delta)}h`;
   }
 }
 
@@ -114,36 +117,21 @@ function formatDateLabel(isoDate: string, period: PeriodValue): string {
 }
 
 function formatRangeStr(value: number, unit: string): string {
-  if (unit === '%') return `${value}%`;
-  if (unit === 'h' || unit === 'h/mo') return `${value}h`;
-  if (unit === 'd') return `${value}d`;
-  if (unit === '\u00d7') return `${value}\u00d7`;
-  return String(value);
+  // Range edges (min/max for the bullet scale) come from CH as raw floats \u2014
+  // round here so '783637.2667' doesn't leak to the screen. Matches the
+  // whole-number policy applied to the value/median in formatBulletValue.
+  const v = Math.round(value);
+  if (unit === '%') return `${v}%`;
+  if (unit === 'h' || unit === 'h/mo') return `${v}h`;
+  if (unit === 'd') return `${v}d`;
+  if (unit === '\u00d7') return `${v}\u00d7`;
+  return String(v);
 }
 
-/**
- * Units where the displayed value should be an integer (counts, members, messages).
- * Fractional-by-nature units (%, hours, ratios, "avg" of small values) are excluded.
- */
-function isCountUnit(unit: string): boolean {
-  const u = unit.toLowerCase().trim();
-  return (
-    u === '' ||
-    u === 'tasks' ||
-    u === 'count' ||
-    u === 'lines' ||
-    u === 'replies' ||
-    u === 'days' ||
-    u === '/mo' ||
-    u === '/day' ||
-    u.startsWith('/ ')
-  );
-}
-
-function formatBulletValue(raw: number | null | undefined, unit: string): string {
+function formatBulletValue(raw: number | null | undefined, _unit: string): string {
   if (raw === null || raw === undefined || !Number.isFinite(raw)) return '—';
-  if (isCountUnit(unit)) return String(Math.round(raw));
-  return String(Math.round(raw * 100) / 100); // up to 2 decimals for %, ratios, hours
+  // Whole-number display — see formatValue() rationale.
+  return String(Math.round(raw));
 }
 
 /**
@@ -171,7 +159,7 @@ function scaleHoursToDays(
   if (unit !== 'h') return null;
   if (rangeMax == null || !Number.isFinite(rangeMax) || rangeMax < 48) return null;
   const toDays = (n: number | null | undefined): number | null | undefined =>
-    n == null || !Number.isFinite(n) ? n : Math.round((n / 24) * 100) / 100;
+    n == null || !Number.isFinite(n) ? n : Math.round(n / 24);
   return {
     unit: 'd',
     value:    toDays(value),
