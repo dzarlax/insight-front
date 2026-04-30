@@ -212,7 +212,7 @@ The screen **MUST** render `TeamBulletSections` for the configured sections (`de
 
 The screen **MUST** render a "Direct reports only" toggle, defaulting to `true`, when an anchor email (`teamOwnerEmail`) is resolvable. The anchor is the lowercased `teamId` when it's an email; otherwise the team lead's own email; otherwise the toggle is hidden. When the toggle is on, the visible member set **MUST** be filtered to people whose `supervisor_email` matches the anchor (case-insensitive).
 
-The toggle's label **SHOULD** include a counter showing `(filtered/total)` so the viewer understands the scope.
+The toggle's label **MUST** include a counter showing `(filtered/total)` so the viewer understands the scope.
 
 **Known limitation**: in v1 the toggle scopes only the members table and the client-derived hero strip; bullet sections still come from server-side per-team aggregates and are not narrowed by the toggle. A separate FR will close that gap once a backend filter is available — see Risks.
 
