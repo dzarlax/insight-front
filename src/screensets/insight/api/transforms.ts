@@ -276,15 +276,31 @@ export function transformBulletMetrics(
   teamSize?: number,
   viewKind: 'ic' | 'team' = 'ic',
 ): BulletMetric[] {
-  const defsByKey = keyBy(
-    BULLET_DEFS.filter((d) => d.section === section),
-    'metric_key',
-  );
+  const sectionDefs = BULLET_DEFS.filter((d) => d.section === section);
+  const defsByKey = keyBy(sectionDefs, 'metric_key');
 
   const pickSublabel = (d: { sublabel: string; teamSublabel?: string }) =>
     viewKind === 'team' && d.teamSublabel ? d.teamSublabel : d.sublabel;
 
-  return rows.map((r) => {
+  // Synthesize honest-zero rows for every metric_key the section knows about
+  // but the backend didn't return. Without this, an unanswered metric makes
+  // the whole bullet disappear from the screen, which reads as "we forgot to
+  // show it" instead of "this person has 0 of this in this period".
+  // Synthetic rows have value=0 and range null → fall through to the
+  // "no distribution" branch below (renders the 0 with placeholder bar).
+  const seenKeys = new Set(rows.map((r) => r.metric_key));
+  const synthetic: RawBulletAggregateRow[] = sectionDefs
+    .filter((d) => !seenKeys.has(d.metric_key))
+    .map((d) => ({
+      metric_key: d.metric_key,
+      value: 0,
+      median: null,
+      range_min: null,
+      range_max: null,
+    }));
+  const allRows = [...rows, ...synthetic];
+
+  return allRows.map((r) => {
       const def = defsByKey[r.metric_key];
 
       if (!def) {
