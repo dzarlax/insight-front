@@ -14,17 +14,20 @@ import {
   selectMembers,
   selectTeamKpis,
   selectBulletSections,
-  selectTeamViewLoading,
   selectTeamName,
   selectTeamViewConfig,
   selectSelectedTeamId,
   selectTeamDrillId,
   selectTeamDrillData,
+  selectTeamSectionStatus,
+  selectTeamSectionError,
+  type SectionStatus,
 } from '../../slices/teamViewSlice';
 import { selectCurrentUser } from '../../slices/currentUserSlice';
 import { selectCustomRange } from '../../slices/periodSlice';
 import { selectInsightViewMode } from '../../slices/insightUiSlice';
 import { resolveDateRange } from '../../utils/periodToDateRange';
+import { findIdentityNode, flattenSubordinates } from '../../utils/identityTree';
 import { TeamHeroStrip } from './components/TeamHeroStrip';
 import { AttentionNeeded } from './components/AttentionNeeded';
 import { MembersTable } from './components/MembersTable';
@@ -32,9 +35,10 @@ import { TeamBulletSections } from './components/TeamBulletSections';
 import { PeriodSelectorBar } from '../../uikit/composite/PeriodSelectorBar';
 import { ViewModeToggle } from '../../uikit/composite/ViewModeToggle';
 import DrillModal from '../../uikit/composite/DrillModal';
+import TeamMetricsModal from './components/TeamMetricsModal';
 import { INSIGHT_SCREENSET_ID, IC_DASHBOARD_SCREEN_ID, TEAM_VIEW_SCREEN_ID } from '../../ids';
 import { getInitials } from '../../utils/getInitials';
-import type { CustomRange } from '../../types';
+import type { BulletSection, CustomRange } from '../../types';
 
 const translations = I18nRegistry.createLoader({
   [Language.English]: () => import('./i18n/en.json'),
@@ -82,31 +86,67 @@ const TeamViewScreen: React.FC = () => {
   const customRange = useAppSelector(selectCustomRange);
   const teamId = useAppSelector(selectSelectedTeamId);
   const currentUser = useAppSelector(selectCurrentUser);
-  const loading = useAppSelector(selectTeamViewLoading);
+  const membersStatus     = useAppSelector(selectTeamSectionStatus('members'));
+  const teamSummaryStatus = useAppSelector(selectTeamSectionStatus('team_summary'));
+  const taskDeliveryStatus  = useAppSelector(selectTeamSectionStatus('task_delivery'));
+  const codeQualityStatus   = useAppSelector(selectTeamSectionStatus('code_quality'));
+  const collaborationStatus = useAppSelector(selectTeamSectionStatus('collaboration'));
+  const aiAdoptionStatus    = useAppSelector(selectTeamSectionStatus('ai_adoption'));
+  const taskDeliveryError   = useAppSelector(selectTeamSectionError('task_delivery'));
+  const codeQualityError    = useAppSelector(selectTeamSectionError('code_quality'));
+  const collaborationError  = useAppSelector(selectTeamSectionError('collaboration'));
+  const aiAdoptionError     = useAppSelector(selectTeamSectionError('ai_adoption'));
+  const sectionStatus: Record<string, SectionStatus | undefined> = {
+    task_delivery:  taskDeliveryStatus,
+    code_quality:   codeQualityStatus,
+    collaboration:  collaborationStatus,
+    ai_adoption:    aiAdoptionStatus,
+  };
+  const sectionErrors: Record<string, string | undefined> = {
+    task_delivery:  taskDeliveryError,
+    code_quality:   codeQualityError,
+    collaboration:  collaborationError,
+    ai_adoption:    aiAdoptionError,
+  };
+  // `members` and `team_summary` block KPI/MembersTable rendering only;
+  // bullet sections render independently via sectionStatus prop.
+  const membersLoading = membersStatus === 'loading' || membersStatus === undefined;
+  const summaryLoading = teamSummaryStatus === 'loading' || teamSummaryStatus === undefined;
   const allMembers = useAppSelector(selectMembers);
   const [directReportsOnly, setDirectReportsOnly] = useState(true);
-  // Team Lead sees their own data via "My Dashboard" — exclude from the team table.
-  // When "Direct reports only" toggle is on, narrow to people whose supervisor_email
-  // matches the current user (for managers) or the current user's own supervisor
-  // (siblings in same team, for ICs).
-  const baseMembers = currentUser.role === 'team_lead'
-    ? allMembers.filter((m) => m.person_id !== currentUser.personId)
-    : allMembers;
-  // `teamId` is either an email (executive drilled into a subordinate's team)
-  // or an org_unit_name string. The direct-reports anchor is:
-  //  - the email itself, when teamId is an email;
-  //  - the team_lead's own email, when viewing their own department;
-  //  - none (executive browsing a flat org_unit), so the checkbox is hidden.
-  const teamOwnerEmail = teamId.includes('@')
-    ? teamId.toLowerCase()
-    : currentUser.role === 'team_lead'
-      ? (currentUser._identity?.email ?? currentUser.personId ?? '').toLowerCase() || null
-      : null;
-  const canFilterDirectReports = teamOwnerEmail !== null;
-  const members = directReportsOnly && teamOwnerEmail
-    ? baseMembers.filter((m) =>
-        (m.supervisor_email ?? '').toLowerCase() === teamOwnerEmail,
-      )
+  const [metricsModalOpen, setMetricsModalOpen] = useState(false);
+
+  // Resolve the IR pivot — the node in the current user's IR tree the team
+  // view is anchored to. Roster (and the sidebar menu) are both derived from
+  // this node's subtree, guaranteeing the two surfaces show the same people.
+  //  - email teamId → drill target node anywhere in the tree
+  //  - own department teamId (managerial roles) → viewer is the pivot,
+  //    roster = their entire subtree
+  const pivot = useMemo(() => {
+    const tree = currentUser._identity ?? null;
+    if (!tree) return null;
+    if (teamId.includes('@')) return findIdentityNode(tree, teamId);
+    const isManager = currentUser.role === 'team_lead' || currentUser.role === 'executive';
+    if (isManager && teamId === tree.department) return tree;
+    return null;
+  }, [currentUser._identity, currentUser.role, teamId]);
+
+  const roster = useMemo(
+    () => (pivot ? flattenSubordinates(pivot) : null),
+    [pivot],
+  );
+
+  // Direct-reports filter: roster carries the `is_direct` flag straight from
+  // the IR tree, so the analytics-side `supervisor_email` check is no longer
+  // needed for the toggle to be authoritative.
+  const baseMembers = allMembers;
+  const canFilterDirectReports = roster !== null;
+  const directReportEmails = useMemo(() => {
+    if (!roster) return null;
+    return new Set(roster.filter((r) => r.is_direct).map((r) => r.email.toLowerCase()));
+  }, [roster]);
+  const members = canFilterDirectReports && directReportsOnly && directReportEmails
+    ? baseMembers.filter((m) => directReportEmails.has(m.person_id.toLowerCase()))
     : baseMembers;
   const storeTeamKpis = useAppSelector(selectTeamKpis);
   // Recompute KPIs client-side over the currently visible members set. When the
@@ -115,12 +155,74 @@ const TeamViewScreen: React.FC = () => {
   // Only fall back to the store when members haven't been fetched yet (both sets
   // empty AND still loading).
   const teamKpis = useMemo(
-    () => (allMembers.length === 0 && loading
+    () => (allMembers.length === 0 && (membersLoading || summaryLoading)
       ? storeTeamKpis
       : deriveTeamKpis(members, period)),
-    [allMembers.length, loading, members, period, storeTeamKpis],
+    [allMembers.length, membersLoading, summaryLoading, members, period, storeTeamKpis],
   );
   const bulletSections = useAppSelector(selectBulletSections);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Direct-reports scoping for member-scale AI metrics.
+  //
+  // The 4 ai_adoption bullets (active_ai_members, cursor_active, cc_active,
+  // codex_active) are member-scale: their value is "N out of teamSize". When
+  // "Direct reports only" is on we want them to read against the visible
+  // member set, not the whole team — otherwise the table shows 5 directs but
+  // the bullet still reads `74/112` for the whole org.
+  //
+  // The other sections (task_delivery, code_quality, estimation,
+  // collaboration) come from server-side per-team aggregates that the
+  // backend can't yet narrow by `person_id IN (list)`. For those we surface
+  // a disclaimer rather than fake the recompute.
+  // ────────────────────────────────────────────────────────────────────────
+  const scopingActive =
+    canFilterDirectReports &&
+    directReportsOnly &&
+    members.length !== allMembers.length;
+
+  const scopedBulletSections: BulletSection[] = useMemo(() => {
+    if (!scopingActive) return bulletSections;
+    const teamSize = members.length;
+    const recompute: Record<string, number> = {
+      active_ai_members: members.filter((m) => m.ai_tools.length > 0).length,
+      cursor_active:     members.filter((m) => m.ai_tools.includes('Cursor')).length,
+      cc_active:         members.filter((m) => m.ai_tools.includes('Claude Code')).length,
+      codex_active:      members.filter((m) => m.ai_tools.includes('Codex')).length,
+    };
+    return bulletSections.map((sec) => {
+      if (sec.id !== 'ai_adoption') return sec;
+      return {
+        ...sec,
+        metrics: sec.metrics.map((m) => {
+          if (!(m.metric_key in recompute)) return m;
+          const value = recompute[m.metric_key];
+          const valuePct = teamSize > 0
+            ? Math.min(100, (value / teamSize) * 100)
+            : 0;
+          return {
+            ...m,
+            value: String(value),
+            unit: `/ ${teamSize}`,
+            range_min: '0',
+            range_max: String(teamSize),
+            // Median is meaningless against a filtered N — drop it instead
+            // of carrying the whole-team median across.
+            median: '—',
+            median_label: '',
+            median_left_pct: 0,
+            bar_left_pct: 0,
+            bar_width_pct: valuePct,
+          };
+        }),
+      };
+    });
+  }, [scopingActive, members, bulletSections]);
+
+  const scopedBulletNote = scopingActive
+    ? `AI Adoption is scoped to direct reports (${members.length} of ${allMembers.length} members). Other sections still reflect the whole team.`
+    : null;
+
   const teamName = useAppSelector(selectTeamName);
   const teamViewConfig = useAppSelector(selectTeamViewConfig);
   const viewMode = useAppSelector(selectInsightViewMode);
@@ -130,8 +232,14 @@ const TeamViewScreen: React.FC = () => {
 
   useEffect(() => {
     if (!teamId) return;
-    loadTeamView(teamId, period, resolveDateRange(period, customRange));
-  }, [teamId, period, customRange]);
+    loadTeamView(
+      teamId,
+      period,
+      resolveDateRange(period, customRange),
+      roster,
+      pivot?.display_name ?? null,
+    );
+  }, [teamId, period, customRange, roster, pivot]);
 
   const handleNavigateToIc = (personId: string): void => {
     selectIcPerson(personId);
@@ -145,10 +253,6 @@ const TeamViewScreen: React.FC = () => {
   const handleDrillClick = (drillId: string): void => {
     if (!teamId) return;
     openTeamDrill({ kind: 'team', teamId, drillId });
-  };
-
-  const handleMembersDrill = (): void => {
-    handleDrillClick('team-members');
   };
 
   const handleCellDrill = (personId: string, drillId: string): void => {
@@ -227,15 +331,30 @@ const TeamViewScreen: React.FC = () => {
       <MembersTable
         members={members}
         columnThresholds={teamViewConfig?.column_thresholds ?? []}
-        loading={loading}
+        loading={membersLoading}
         onRowClick={handleNavigateToIc}
-        onDetailsDrill={handleMembersDrill}
         onCellDrill={handleCellDrill}
+        onViewAllStats={members.length > 0 ? () => { setMetricsModalOpen(true); } : undefined}
       />
 
+      <TeamMetricsModal
+        open={metricsModalOpen}
+        onClose={() => { setMetricsModalOpen(false); }}
+        members={members}
+        range={resolveDateRange(period, customRange)}
+      />
+
+      {scopedBulletNote && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          {scopedBulletNote}
+        </div>
+      )}
+
       <TeamBulletSections
-        bulletSections={bulletSections}
+        bulletSections={scopedBulletSections}
         viewMode={viewMode}
+        sectionStatus={sectionStatus}
+        sectionErrors={sectionErrors}
         onDrillClick={handleDrillClick}
       />
 

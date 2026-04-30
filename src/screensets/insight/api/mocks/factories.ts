@@ -78,11 +78,22 @@ const IC_BULLET_DEFS: IcBulletDef[] = [
   { metric_key: 'estimation_accuracy', section: 'task_delivery', label: 'Estimation Accuracy', sublabel: 'Jira \u00b7 tasks within \u00b120% of original estimate', unit: '\u00d7', range_min: '0\u00d7', range_max: '3\u00d7', median: 0, median_label: 'Target 0.9\u20131.3\u00d7', bar_width_pct: 22, median_left_pct: 33, status: 'good', drill_id: '', defaultValue: 1.1 },
   { metric_key: 'task_reopen_rate', section: 'task_delivery', label: 'Task Reopen Rate', sublabel: 'Jira \u00b7 closed then reopened within 14 days \u00b7 lower = better', unit: '%', range_min: '0%', range_max: '15%', median: 5, median_label: 'Median: 5%', bar_width_pct: 27, median_left_pct: 33, status: 'good', drill_id: 'task-reopen', defaultValue: 4 },
   { metric_key: 'due_date_compliance', section: 'task_delivery', label: 'Due Date Compliance', sublabel: 'Jira \u00b7 tasks closed by due date', unit: '%', range_min: '40%', range_max: '100%', median: 72, median_label: 'Median: 72%', bar_width_pct: 87, median_left_pct: 53, status: 'good', drill_id: '', defaultValue: 92 },
+  { metric_key: 'worklog_logging_accuracy', section: 'task_delivery', label: 'Worklog Logging Accuracy', sublabel: 'Jira \u00b7 worklog logged \u00f7 time in In Progress \u00b7 100 = on target', unit: '%', range_min: '10%', range_max: '120%', median: 65, median_label: 'Median: 65%', bar_width_pct: 60, median_left_pct: 50, status: 'good', drill_id: '', defaultValue: 78 },
+  { metric_key: 'bugs_to_task_ratio', section: 'task_delivery', label: 'Bugs / Tasks Closed', sublabel: 'Jira \u00b7 bug-type issues \u00f7 total closed \u00b7 lower = better', unit: '%', range_min: '0%', range_max: '60%', median: 22, median_label: 'Median: 22%', bar_width_pct: 30, median_left_pct: 35, status: 'good', drill_id: '', defaultValue: 18 },
+  { metric_key: 'mean_time_to_resolution', section: 'task_delivery', label: 'Mean Time to Resolution', sublabel: 'Jira \u00b7 close \u2212 create \u00b7 lower = better', unit: 'd', range_min: '1d', range_max: '60d', median: 12, median_label: 'Median: 12d', bar_width_pct: 25, median_left_pct: 20, status: 'good', drill_id: '', defaultValue: 9 },
+  { metric_key: 'stale_in_progress', section: 'task_delivery', label: 'Stale In-Progress', sublabel: 'Jira \u00b7 In-Progress issues untouched > 14 days', unit: 'tasks', drill_id: '', range_min: '0', range_max: '25', median: 3, median_label: 'Median: 3', bar_width_pct: 12, median_left_pct: 12, status: 'good', defaultValue: 2 },
   // git_output
   { metric_key: 'commits', section: 'git_output', label: 'Commits Created', sublabel: 'Bitbucket \u00b7 commits authored', unit: 'count', range_min: '8', range_max: '55', median: 22, median_label: 'Median: 22', bar_width_pct: 55, median_left_pct: 30, status: 'good', drill_id: 'commits', defaultValue: 34 },
   { metric_key: 'prs_created', section: 'git_output', label: 'Pull Requests Created', sublabel: 'Bitbucket \u00b7 PRs authored', unit: 'count', range_min: '2', range_max: '14', median: 6, median_label: 'Median: 6', bar_width_pct: 75, median_left_pct: 33, status: 'good', drill_id: 'pull-requests', defaultValue: 11 },
   { metric_key: 'prs_merged', section: 'git_output', label: 'Pull Requests Merged', sublabel: 'Bitbucket \u00b7 authored and merged', unit: 'count', range_min: '0', range_max: '20', median: 6, median_label: 'Median: 6', bar_width_pct: 45, median_left_pct: 38, status: 'good', drill_id: '', defaultValue: 9 },
   { metric_key: 'clean_loc', section: 'git_output', label: 'Clean LOC', sublabel: 'Bitbucket \u00b7 lines added \u00b7 excl. spec/config', unit: 'count', range_min: '1k', range_max: '18k', median: 7000, median_label: 'Median: 7k', bar_width_pct: 65, median_left_pct: 35, status: 'good', drill_id: '', defaultValue: 12000 },
+  // Derived git metrics \u2014 built from commits, prs_created, prs_merged, loc above.
+  // Visual variety on the dashboard: different units, statuses, bar fills.
+  { metric_key: 'pr_review_time', section: 'git_output', label: 'PR Review Time', sublabel: 'Bitbucket \u00b7 PR opened \u2192 first approval \u00b7 lower = better', unit: 'h', range_min: '4h', range_max: '72h', median: 22, median_label: 'Target <24h', bar_width_pct: 41, median_left_pct: 26, status: 'warn', drill_id: 'pull-requests', defaultValue: 28 },
+  { metric_key: 'merge_rate', section: 'git_output', label: 'PR Merge Rate', sublabel: 'Bitbucket \u00b7 merged \u00f7 created \u00b7 higher = better', unit: '%', range_min: '30%', range_max: '100%', median: 78, median_label: 'Median: 78%', bar_width_pct: 84, median_left_pct: 69, status: 'good', drill_id: '', defaultValue: 88 },
+  { metric_key: 'lines_per_commit', section: 'git_output', label: 'Lines / Commit', sublabel: 'Bitbucket \u00b7 commit size \u00b7 lower = better, smaller = reviewable', unit: 'count', range_min: '20', range_max: '300', median: 85, median_label: 'Target <100', bar_width_pct: 23, median_left_pct: 23, status: 'good', drill_id: '', defaultValue: 62 },
+  { metric_key: 'commits_per_active_day', section: 'git_output', label: 'Commits / Active Day', sublabel: 'Bitbucket \u00b7 cadence on days with any commit', unit: 'count', range_min: '0.5', range_max: '8', median: 3.2, median_label: 'Median: 3.2', bar_width_pct: 56, median_left_pct: 36, status: 'good', drill_id: '', defaultValue: 4.5 },
+  { metric_key: 'unique_files_touched', section: 'git_output', label: 'Unique Files Touched', sublabel: 'Bitbucket \u00b7 distinct files modified this period', unit: 'count', range_min: '5', range_max: '120', median: 35, median_label: 'Median: 35', bar_width_pct: 72, median_left_pct: 25, status: 'good', drill_id: '', defaultValue: 86 },
   // code_quality
   { metric_key: 'reviews_given', section: 'code_quality', label: 'Reviews Given', sublabel: 'Bitbucket \u00b7 PRs reviewed', unit: 'count', range_min: '0', range_max: '20', median: 8, median_label: 'Median: 8', bar_width_pct: 70, median_left_pct: 40, status: 'good', drill_id: 'reviews', defaultValue: 14 },
   { metric_key: 'rework_ratio', section: 'code_quality', label: 'Rework Ratio', sublabel: 'Bitbucket \u00b7 lines changed in follow-up commits \u00b7 lower = better', unit: '%', range_min: '0%', range_max: '50%', median: 0, median_label: 'Target <20%', bar_width_pct: 12, median_left_pct: 20, status: 'good', drill_id: '', defaultValue: 12 },
@@ -98,28 +109,39 @@ const IC_BULLET_DEFS: IcBulletDef[] = [
   { metric_key: 'cc_sessions', section: 'ai_tools', label: 'Claude Code Sessions', sublabel: 'Anthropic Enterprise API \u00b7 sessions this month', unit: 'count', range_min: '0', range_max: '60', median: 12, median_label: 'Median: 12', bar_width_pct: 40, median_left_pct: 20, status: 'good', drill_id: '', defaultValue: 24 },
   { metric_key: 'cc_tool_accept', section: 'ai_tools', label: 'Tool Acceptance Rate', sublabel: 'Anthropic Enterprise API \u00b7 accepted \u00f7 offered', unit: '%', range_min: '0%', range_max: '100%', median: 64, median_label: 'Median: 64%', bar_width_pct: 76, median_left_pct: 64, status: 'good', drill_id: '', defaultValue: 76 },
   { metric_key: 'cc_lines', section: 'ai_tools', label: 'Lines Added (Claude Code)', sublabel: 'Anthropic Enterprise API \u00b7 lines added by Claude Code', unit: 'count', range_min: '0', range_max: '3k', median: 600, median_label: 'Median: 600', bar_width_pct: 37, median_left_pct: 20, status: 'good', drill_id: '', defaultValue: 1100 },
-  { metric_key: 'ai_loc_share2', section: 'ai_tools', label: 'AI LOC Share', sublabel: 'Cursor + Claude Code \u00b7 accepted lines \u00f7 clean LOC', unit: '%', range_min: '0%', range_max: '34%', median: 18, median_label: 'Median: 18%', bar_width_pct: 79, median_left_pct: 53, status: 'good', drill_id: '', defaultValue: 27 },
+  { metric_key: 'ai_loc_share2', section: 'ai_tools', label: 'AI Code Acceptance', sublabel: 'Cursor + Claude Code \u00b7 accepted lines \u00f7 clean LOC', unit: '%', range_min: '0%', range_max: '34%', median: 18, median_label: 'Median: 18%', bar_width_pct: 79, median_left_pct: 53, status: 'good', drill_id: '', defaultValue: 27 },
   { metric_key: 'claude_web', section: 'ai_tools', label: 'Claude Web Usage', sublabel: 'Claude Web \u00b7 conversations this month', unit: 'count', range_min: '0', range_max: '80', median: 18, median_label: 'Median: 18', bar_width_pct: 40, median_left_pct: 23, status: 'good', drill_id: '', defaultValue: 32 },
   { metric_key: 'chatgpt', section: 'ai_tools', label: 'ChatGPT Usage', sublabel: 'ChatGPT \u00b7 conversations this month', unit: 'count', range_min: '0', range_max: '40', median: 12, median_label: 'Median: 12', bar_width_pct: 20, median_left_pct: 30, status: 'good', drill_id: '', defaultValue: 8 },
   // collab
-  { metric_key: 'slack_thread_participation', section: 'collab', label: 'Thread Participation', sublabel: 'Slack \u00b7 replies to others\' threads', unit: 'replies', range_min: '0', range_max: '80', median: 29, median_label: 'Median: 29', bar_width_pct: 43, median_left_pct: 36, status: 'good', drill_id: '', defaultValue: 34 },
-  { metric_key: 'slack_message_engagement', section: 'collab', label: 'Message Engagement', sublabel: 'Slack \u00b7 avg replies per thread', unit: 'avg', range_min: '0', range_max: '5', median: 1.8, median_label: 'Median: 1.8', bar_width_pct: 42, median_left_pct: 36, status: 'good', drill_id: '', defaultValue: 2.1 },
-  { metric_key: 'slack_dm_ratio', section: 'collab', label: 'DM Ratio', sublabel: 'Slack \u00b7 DMs \u00f7 all messages \u00b7 lower = more open', unit: '%', range_min: '0%', range_max: '100%', median: 28, median_label: 'Median: 28% \u00b7 lower = more open', bar_width_pct: 24, median_left_pct: 28, status: 'good', drill_id: '', defaultValue: 24 },
-  { metric_key: 'm365_teams_messages', section: 'collab', label: 'Teams Messages', sublabel: 'Microsoft Teams \u00b7 all channels sent', unit: '/mo', range_min: '0', range_max: '400', median: 148, median_label: 'Median: 148', bar_width_pct: 42, median_left_pct: 37, status: 'good', drill_id: '', defaultValue: 168 },
-  { metric_key: 'm365_emails_sent', section: 'collab', label: 'Emails Sent', sublabel: 'M365 \u00b7 avg per member \u00b7 lower = better', unit: '/mo', range_min: '0', range_max: '120', median: 35, median_label: 'Median: 35 \u00b7 lower = better', bar_width_pct: 26, median_left_pct: 29, status: 'good', drill_id: '', defaultValue: 31 },
-  { metric_key: 'm365_files_shared', section: 'collab', label: 'Files Shared', sublabel: 'M365 \u00b7 avg per member', unit: '/mo', range_min: '0', range_max: '30', median: 8, median_label: 'Median: 8', bar_width_pct: 30, median_left_pct: 27, status: 'good', drill_id: '', defaultValue: 9 },
-  { metric_key: 'meeting_hours', section: 'collab', label: 'Meeting Hours', sublabel: 'Zoom \u00b7 meeting duration + M365 audioDuration \u00b7 lower = more focus time', unit: 'h/mo', range_min: '4h', range_max: '28h', median: 16, median_label: 'Median: 16h', bar_width_pct: 33, median_left_pct: 50, status: 'good', drill_id: '', defaultValue: 12 },
-  { metric_key: 'zoom_calls', section: 'collab', label: 'Zoom Calls', sublabel: 'Zoom API \u00b7 avg calls attended per member', unit: '/mo', range_min: '0', range_max: '20', median: 9, median_label: 'Median: 9', bar_width_pct: 55, median_left_pct: 45, status: 'good', drill_id: '', defaultValue: 11 },
-  { metric_key: 'meeting_free', section: 'collab', label: 'Meeting-Free Days', sublabel: 'Zoom \u00b7 days with no meetings + M365 \u00b7 avg \u00b7 higher = better', unit: 'days', range_min: '0', range_max: '10', median: 4, median_label: 'Median: 4', bar_width_pct: 50, median_left_pct: 40, status: 'good', drill_id: '', defaultValue: 5 },
+  { metric_key: 'slack_messages_sent', section: 'collab', label: 'Messages Sent', sublabel: 'Slack \u00b7 messages sent \u00b7 avg per person \u00b7 period total', unit: 'messages', range_min: '0', range_max: '400', median: 120, median_label: 'Median: 120', bar_width_pct: 35, median_left_pct: 30, status: 'good', drill_id: '', defaultValue: 140 },
+  { metric_key: 'slack_channel_posts', section: 'collab', label: 'Channel Posts', sublabel: 'Slack \u00b7 posts in public channels \u00b7 avg per person \u00b7 period total', unit: 'messages', range_min: '0', range_max: '80', median: 29, median_label: 'Median: 29', bar_width_pct: 43, median_left_pct: 36, status: 'good', drill_id: '', defaultValue: 34 },
+  { metric_key: 'slack_active_days', section: 'collab', label: 'Active Days', sublabel: 'Slack \u00b7 days with any messages \u00b7 avg per person \u00b7 period total', unit: 'days', range_min: '0', range_max: '22', median: 14, median_label: 'Median: 14', bar_width_pct: 64, median_left_pct: 64, status: 'good', drill_id: '', defaultValue: 16 },
+  { metric_key: 'slack_msgs_per_active_day', section: 'collab', label: 'Messages per Active Day', sublabel: 'Slack \u00b7 messages \u00f7 active days \u00b7 avg per person \u00b7 daily avg', unit: 'messages/day', range_min: '0', range_max: '40', median: 8, median_label: 'Median: 8', bar_width_pct: 25, median_left_pct: 20, status: 'good', drill_id: '', defaultValue: 9 },
+  { metric_key: 'slack_dm_ratio', section: 'collab', label: 'DM Ratio', sublabel: 'Slack \u00b7 DMs \u00f7 all messages \u00b7 avg per person \u00b7 daily avg \u00b7 lower = more open', unit: '%', range_min: '0%', range_max: '100%', median: 28, median_label: 'Median: 28% \u00b7 lower = more open', bar_width_pct: 24, median_left_pct: 28, status: 'good', drill_id: '', defaultValue: 24 },
+  { metric_key: 'm365_active_days', section: 'collab', label: 'Active Days', sublabel: 'M365 \u00b7 days with any sent / chat / file activity \u00b7 avg per person \u00b7 period total', unit: 'days', range_min: '0', range_max: '22', median: 18, median_label: 'Median: 18', bar_width_pct: 80, median_left_pct: 80, status: 'good', drill_id: '', defaultValue: 19 },
+  { metric_key: 'm365_emails_sent', section: 'collab', label: 'Emails Sent', sublabel: 'M365 \u00b7 emails sent \u00b7 avg per person \u00b7 period total', unit: 'emails', range_min: '0', range_max: '120', median: 35, median_label: 'Median: 35', bar_width_pct: 26, median_left_pct: 29, status: 'good', drill_id: '', defaultValue: 31 },
+  { metric_key: 'm365_emails_received', section: 'collab', label: 'Emails Received', sublabel: 'M365 \u00b7 inbox volume \u00b7 avg per person \u00b7 period total', unit: 'emails', range_min: '0', range_max: '500', median: 150, median_label: 'Median: 150', bar_width_pct: 30, median_left_pct: 30, status: 'good', drill_id: '', defaultValue: 180 },
+  { metric_key: 'm365_emails_read', section: 'collab', label: 'Emails Read', sublabel: 'M365 \u00b7 emails read \u00b7 avg per person \u00b7 period total', unit: 'emails', range_min: '0', range_max: '800', median: 250, median_label: 'Median: 250', bar_width_pct: 35, median_left_pct: 31, status: 'good', drill_id: '', defaultValue: 280 },
+  { metric_key: 'm365_teams_chats', section: 'collab', label: 'Teams Chats', sublabel: 'Microsoft Teams \u00b7 DMs and group chats \u00b7 avg per person \u00b7 period total', unit: 'messages', range_min: '0', range_max: '400', median: 148, median_label: 'Median: 148', bar_width_pct: 42, median_left_pct: 37, status: 'good', drill_id: '', defaultValue: 168 },
+  { metric_key: 'm365_files_engaged', section: 'collab', label: 'Files Engaged', sublabel: 'M365 \u00b7 files viewed or edited \u00b7 avg per person \u00b7 period total', unit: 'files', range_min: '0', range_max: '200', median: 60, median_label: 'Median: 60', bar_width_pct: 30, median_left_pct: 30, status: 'good', drill_id: '', defaultValue: 70 },
+  { metric_key: 'm365_files_shared_internal', section: 'collab', label: 'Files Shared (Internal)', sublabel: 'M365 \u00b7 files shared inside org \u00b7 avg per person \u00b7 period total', unit: 'files', range_min: '0', range_max: '30', median: 8, median_label: 'Median: 8', bar_width_pct: 30, median_left_pct: 27, status: 'good', drill_id: '', defaultValue: 9 },
+  { metric_key: 'm365_files_shared_external', section: 'collab', label: 'Files Shared (External)', sublabel: 'M365 \u00b7 files shared outside org \u00b7 avg per person \u00b7 period total \u00b7 governance signal', unit: 'files', range_min: '0', range_max: '10', median: 1, median_label: 'Median: 1', bar_width_pct: 10, median_left_pct: 10, status: 'good', drill_id: '', defaultValue: 0 },
+  { metric_key: 'meeting_hours', section: 'collab', label: 'Meeting Hours', sublabel: 'Teams + Zoom \u00b7 longest modality per meeting \u00b7 avg per person \u00b7 period total', unit: 'h', range_min: '0', range_max: '60', median: 20, median_label: 'Median: 20h', bar_width_pct: 33, median_left_pct: 33, status: 'good', drill_id: '', defaultValue: 24 },
+  { metric_key: 'meetings_count', section: 'collab', label: 'Meetings Attended', sublabel: 'Teams + Zoom \u00b7 distinct meetings joined \u00b7 avg per person \u00b7 period total', unit: 'meetings', range_min: '0', range_max: '120', median: 40, median_label: 'Median: 40', bar_width_pct: 33, median_left_pct: 33, status: 'good', drill_id: '', defaultValue: 50 },
+  { metric_key: 'teams_meeting_hours', section: 'collab', label: 'Teams Meeting Hours', sublabel: 'Microsoft Teams \u00b7 longest modality per meeting \u00b7 avg per person \u00b7 period total', unit: 'h', range_min: '0', range_max: '50', median: 14, median_label: 'Median: 14h', bar_width_pct: 28, median_left_pct: 28, status: 'good', drill_id: '', defaultValue: 18 },
+  { metric_key: 'zoom_meeting_hours', section: 'collab', label: 'Zoom Meeting Hours', sublabel: 'Zoom \u00b7 longest modality per meeting \u00b7 avg per person \u00b7 period total', unit: 'h', range_min: '0', range_max: '30', median: 6, median_label: 'Median: 6h', bar_width_pct: 20, median_left_pct: 20, status: 'good', drill_id: '', defaultValue: 8 },
+  { metric_key: 'teams_meetings', section: 'collab', label: 'Teams Meetings Attended', sublabel: 'Microsoft Teams \u00b7 distinct meetings joined \u00b7 avg per person \u00b7 period total', unit: 'meetings', range_min: '0', range_max: '80', median: 28, median_label: 'Median: 28', bar_width_pct: 35, median_left_pct: 35, status: 'good', drill_id: '', defaultValue: 32 },
+  { metric_key: 'zoom_meetings', section: 'collab', label: 'Zoom Meetings Attended', sublabel: 'Zoom \u00b7 distinct meetings joined \u00b7 avg per person \u00b7 period total', unit: 'meetings', range_min: '0', range_max: '40', median: 9, median_label: 'Median: 9', bar_width_pct: 25, median_left_pct: 22, status: 'good', drill_id: '', defaultValue: 11 },
+  { metric_key: 'meeting_free', section: 'collab', label: 'Meeting-Free Days', sublabel: 'Teams + Zoom \u00b7 days with any record but no meeting time \u00b7 avg per person \u00b7 period total', unit: 'days', range_min: '0', range_max: '15', median: 5, median_label: 'Median: 5', bar_width_pct: 33, median_left_pct: 33, status: 'good', drill_id: '', defaultValue: 6 },
 ];
 
 // IC sections -> metric keys mapping
 const IC_SECTIONS: Record<string, string[]> = {
-  task_delivery: ['tasks_completed', 'task_dev_time', 'estimation_accuracy', 'task_reopen_rate', 'due_date_compliance'],
-  git_output: ['commits', 'prs_created', 'prs_merged', 'clean_loc'],
+  task_delivery: ['tasks_completed', 'task_dev_time', 'estimation_accuracy', 'task_reopen_rate', 'due_date_compliance', 'worklog_logging_accuracy', 'bugs_to_task_ratio', 'mean_time_to_resolution', 'stale_in_progress'],
+  git_output: ['commits', 'prs_created', 'prs_merged', 'clean_loc', 'pr_review_time', 'merge_rate', 'lines_per_commit', 'commits_per_active_day', 'unique_files_touched'],
   code_quality: ['reviews_given', 'rework_ratio', 'build_success', 'pr_cycle_time', 'pickup_time', 'bugs_fixed', 'bug_reopen_rate'],
   ai_tools: ['cursor_completions', 'cursor_agents', 'cursor_lines', 'cc_sessions', 'cc_tool_accept', 'cc_lines', 'ai_loc_share2', 'claude_web', 'chatgpt'],
-  collab: ['slack_thread_participation', 'slack_message_engagement', 'slack_dm_ratio', 'm365_teams_messages', 'm365_emails_sent', 'm365_files_shared', 'meeting_hours', 'zoom_calls', 'meeting_free'],
+  collab: ['slack_messages_sent', 'slack_channel_posts', 'slack_active_days', 'slack_msgs_per_active_day', 'slack_dm_ratio', 'm365_active_days', 'm365_emails_sent', 'm365_emails_received', 'm365_emails_read', 'm365_teams_chats', 'm365_files_engaged', 'm365_files_shared_internal', 'm365_files_shared_external', 'meeting_free', 'meeting_hours', 'meetings_count', 'teams_meeting_hours', 'zoom_meeting_hours', 'teams_meetings', 'zoom_meetings'],
 };
 
 // ---------------------------------------------------------------------------
@@ -159,6 +181,7 @@ export function mockTeamMemberRow(overrides?: Partial<RawTeamMemberRow>): RawTea
     ...overrides,
   };
 }
+
 
 export function mockIcAggregateRow(overrides?: Partial<RawIcAggregateRow>): RawIcAggregateRow {
   return {
@@ -309,6 +332,10 @@ const MOCK_BULLET_DIST: Partial<Record<string, MockBulletDist>> = {
   task_reopen_rate:           { median: 5,     range_min: 0,  range_max: 15 },
   due_date_compliance:        { median: 72,    range_min: 40, range_max: 100 },
   estimation_accuracy:        { median: 58,    range_min: 0,  range_max: 100 },
+  worklog_logging_accuracy:   { median: 65,    range_min: 10, range_max: 120 },
+  bugs_to_task_ratio:         { median: 22,    range_min: 0,  range_max: 60 },
+  mean_time_to_resolution:    { median: 12,    range_min: 1,  range_max: 60 },
+  stale_in_progress:          { median: 3,     range_min: 0,  range_max: 25 },
   commits:                    { median: 50,    range_min: 0,  range_max: 1000 },
   prs_per_dev:                { median: 6,     range_min: 0,  range_max: 20 },
   build_success:              { median: 89,    range_min: 78, range_max: 97 },
@@ -335,15 +362,26 @@ const MOCK_BULLET_DIST: Partial<Record<string, MockBulletDist>> = {
   chatgpt:                    { median: 0,     range_min: 0,  range_max: 100 },
   claude_web:                 { median: 0,     range_min: 0,  range_max: 100 },
   ai_loc_share2:              { median: 14,    range_min: 0,  range_max: 50 },
-  slack_thread_participation: { median: 29,    range_min: 0,  range_max: 80 },
-  slack_message_engagement:   { median: 1.8,   range_min: 0,  range_max: 5 },
+  slack_messages_sent:        { median: 120,   range_min: 0,  range_max: 400 },
+  slack_channel_posts:        { median: 29,    range_min: 0,  range_max: 80 },
+  slack_active_days:          { median: 14,    range_min: 0,  range_max: 22 },
+  slack_msgs_per_active_day:  { median: 8,     range_min: 0,  range_max: 40 },
   slack_dm_ratio:             { median: 28,    range_min: 0,  range_max: 100 },
-  m365_teams_messages:        { median: 148,   range_min: 0,  range_max: 400 },
+  m365_active_days:           { median: 18,    range_min: 0,  range_max: 22 },
   m365_emails_sent:           { median: 35,    range_min: 0,  range_max: 120 },
-  m365_files_shared:          { median: 8,     range_min: 0,  range_max: 30 },
-  meeting_hours:              { median: 103,   range_min: 0,  range_max: 300 },
-  zoom_calls:                 { median: 169,   range_min: 0,  range_max: 1200 },
-  meeting_free:               { median: 4,     range_min: 0,  range_max: 30 },
+  m365_emails_received:       { median: 150,   range_min: 0,  range_max: 500 },
+  m365_emails_read:           { median: 250,   range_min: 0,  range_max: 800 },
+  m365_teams_chats:           { median: 148,   range_min: 0,  range_max: 400 },
+  m365_files_engaged:         { median: 60,    range_min: 0,  range_max: 200 },
+  m365_files_shared_internal: { median: 8,     range_min: 0,  range_max: 30 },
+  m365_files_shared_external: { median: 1,     range_min: 0,  range_max: 10 },
+  meeting_hours:              { median: 20,    range_min: 0,  range_max: 60 },
+  meetings_count:             { median: 40,    range_min: 0,  range_max: 120 },
+  teams_meeting_hours:        { median: 14,    range_min: 0,  range_max: 50 },
+  zoom_meeting_hours:         { median: 6,     range_min: 0,  range_max: 30 },
+  teams_meetings:             { median: 28,    range_min: 0,  range_max: 80 },
+  zoom_meetings:              { median: 9,     range_min: 0,  range_max: 40 },
+  meeting_free:               { median: 5,     range_min: 0,  range_max: 15 },
 };
 
 export function mockTeamBulletSection(section: string, seed = 0): RawBulletAggregateRow[] {
@@ -410,14 +448,29 @@ export function mockIcBulletSection(section: string, seed = 0): RawBulletAggrega
     };
 
     // Attach passthrough display fields that transforms.ts reads
-    // when no BULLET_DEFS match is found (the IC-level path)
+    // when no BULLET_DEFS match is found (the IC-level path).
+    // range_min/range_max in IC_BULLET_DEFS are human-friendly strings like
+    // '0%' / '15%' / '1k' / '18k' / '500h'. transforms.ts later runs them
+    // through formatRangeStr which appends the unit again, so we have to
+    // strip the unit characters here. But magnitude suffixes (`k`, `m`)
+    // carry actual scale and **must** be honored — turning '18k' into 18
+    // gives bullets a 1000× wrong range and a broken bar geometry.
+    const numeric = (s: string): number => {
+      const stripped = s.trim().toLowerCase().replace(/[%×hd\s]/g, '');
+      const match = /^(-?\d+(?:\.\d+)?)([km])?$/.exec(stripped);
+      if (!match) return 0;
+      const base = Number(match[1]);
+      if (!Number.isFinite(base)) return 0;
+      const mult = match[2] === 'k' ? 1_000 : match[2] === 'm' ? 1_000_000 : 1;
+      return base * mult;
+    };
+    row.range_min = numeric(def.range_min);
+    row.range_max = numeric(def.range_max);
     const ext = row as unknown as Record<string, unknown>;
     ext['section'] = def.section;
     ext['label'] = def.label;
     ext['sublabel'] = def.sublabel;
     ext['unit'] = def.unit;
-    ext['range_min'] = def.range_min;
-    ext['range_max'] = def.range_max;
     ext['median_label'] = def.median_label;
     ext['bar_left_pct'] = 0;
     ext['bar_width_pct'] = def.bar_width_pct;

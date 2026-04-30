@@ -25,7 +25,7 @@ const ChartLegend: React.FC = () => (
     </div>
     <div className="flex items-center gap-1">
       <div className="w-4 h-1.5 rounded bg-gradient-to-r from-green-600 via-amber-600 to-red-600" />
-      <span className="text-2xs text-gray-400">Your result · color = vs target</span>
+      <span className="text-2xs text-gray-400">Result · color = vs target</span>
     </div>
   </div>
 );
@@ -101,7 +101,7 @@ const AiToolsSection: React.FC<AiToolsSectionProps> = ({
         {/* Right column */}
         <div className="flex flex-col gap-5">
           <div>
-            <SectionHeading>AI LOC SHARE · Cursor + Claude Code</SectionHeading>
+            <SectionHeading>AI CODE ACCEPTANCE · Cursor + Claude Code</SectionHeading>
             <div className="flex flex-col gap-4">
               {aiLocMetrics.map((metric) => (
                 <BulletChart key={metric.metric_key} metric={metric} onDrillClick={onDrillClick} mode="chart" personName={personName} />

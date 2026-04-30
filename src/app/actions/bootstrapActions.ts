@@ -48,20 +48,28 @@ function deriveRole(person: IdentityPerson): 'executive' | 'team_lead' | 'ic' {
  * Called by Layout on mount. Emits events for header + menu updates.
  */
 export function fetchCurrentUser(): void {
-  // Fire-and-forget: read token from OIDC session, resolve identity
+  // Read token from OIDC session. In dev mode without OIDC, fall back to the
+  // VITE_DEV_USER_EMAIL env var for impersonation. Prod builds drop the
+  // fallback branch entirely (dead-code eliminated by import.meta.env.DEV).
+  let email = '';
   const storageKey = Object.keys(sessionStorage).find((k) => k.startsWith('oidc.user:'));
-  if (!storageKey) return;
-  const stored = sessionStorage.getItem(storageKey);
-  if (!stored) return;
+  if (storageKey) {
+    const stored = sessionStorage.getItem(storageKey);
+    if (stored) {
+      try {
+        const token = (JSON.parse(stored) as { access_token?: string }).access_token ?? '';
+        const claims = decodeJwtPayload(token);
+        // MVP: Entra ID puts the email in `unique_name`; Okta defaults `sub` to the user's login (email).
+        // TODO: switch to the standard `email` claim once the backend extracts and validates it.
+        if (typeof claims?.unique_name === 'string') email = claims.unique_name;
+        else if (typeof claims?.sub === 'string') email = claims.sub;
+      } catch { /* ignore */ }
+    }
+  }
 
-  let token: string;
-  try {
-    token = (JSON.parse(stored) as { access_token?: string }).access_token ?? '';
-  } catch { return; }
-  if (!token) return;
-
-  const claims = decodeJwtPayload(token);
-  const email = typeof claims?.sub === 'string' ? claims.sub : '';
+  if (!email && import.meta.env.DEV) {
+    email = import.meta.env.VITE_DEV_USER_EMAIL ?? '';
+  }
   if (!email) return;
 
   const identity = apiRegistry.getService(IdentityApiService);

@@ -15,10 +15,37 @@ import { filterBulletsByLayoutGroup } from '../../../api/thresholdConfig';
 export interface TeamBulletSectionsProps {
   bulletSections: BulletSection[];
   viewMode: ViewMode;
+  /** Per-section status from the slice — drives skeleton/error placeholders. */
+  sectionStatus?: Record<string, 'loading' | 'loaded' | 'errored' | undefined>;
+  /** Per-section error messages, only shown when status === 'errored'. */
+  sectionErrors?: Record<string, string | undefined>;
   onDrillClick?: (drillId: string) => void;
 }
 
-// Company-median legend used in all team sections
+const SectionPlaceholder: React.FC<{ title: string; kind: 'loading' | 'errored'; error?: string }> = ({ title, kind, error }) => (
+  <Card className="bg-white">
+    <CardContent className="px-3.5 py-3">
+      <div className="text-sm font-semibold text-gray-900 mb-2">{title}</div>
+      {kind === 'loading' ? (
+        <div className="flex flex-col gap-2 animate-pulse">
+          <div className="h-3 bg-gray-100 rounded w-3/4" />
+          <div className="h-3 bg-gray-100 rounded w-2/3" />
+          <div className="h-3 bg-gray-100 rounded w-4/5" />
+        </div>
+      ) : (
+        <div className="text-2xs text-red-600">
+          {error ?? 'Failed to load'}
+        </div>
+      )}
+    </CardContent>
+  </Card>
+);
+
+// Shared bullet legend used in all team sections — matches the IC dashboard
+// legend so the same swatches mean the same thing across screens. Gray bar =
+// median (company-wide on team view, team-wide on IC view); gradient swatch
+// communicates that the bullet bar is color-coded by status (green = good,
+// amber = warn, red = bad) against the metric's good/warn thresholds.
 const Legend: React.FC = () => (
   <div className="flex items-center gap-3 text-2xs text-gray-400 mb-2.5">
     <span className="flex items-center gap-1">
@@ -26,8 +53,8 @@ const Legend: React.FC = () => (
       Company median
     </span>
     <span className="flex items-center gap-1">
-      <span className="w-4 h-1.5 rounded bg-blue-600 inline-block" />
-      Team
+      <span className="w-4 h-1.5 rounded bg-gradient-to-r from-green-600 via-amber-600 to-red-600 inline-block" />
+      Team result · color = vs target
     </span>
   </div>
 );
@@ -119,35 +146,77 @@ const AiAdoptionSection: React.FC<{ metrics: BulletMetric[]; onDrillClick?: (id:
   );
 };
 
-// Collaboration — collapsible, 3 columns driven by BULLET_LAYOUT_GROUPS.
-const COLLAB_COLUMNS = [
-  { title: 'Slack',                  group: 'slack' },
-  { title: 'M365',                   group: 'm365' },
-  { title: 'Meetings · M365 · Zoom', group: 'meetings' },
+// Collaboration — collapsible, 3 columns aligned by metric category so
+// analogous metrics across Slack / Microsoft 365 / Meetings sit at the
+// same row. Keep in sync with ic-dashboard CollaborationSection.tsx.
+const ALIGNED_COLLAB_ROWS: Array<{
+  slack: string | null;
+  m365: string | null;
+  meetings: string | null;
+}> = [
+  { slack: 'slack_messages_sent',       m365: 'm365_emails_sent',         meetings: 'meetings_count' },
+  { slack: 'slack_channel_posts',       m365: 'm365_emails_received',     meetings: 'meeting_hours' },
+  { slack: 'slack_msgs_per_active_day', m365: 'm365_emails_read',         meetings: 'teams_meetings' },
+  { slack: 'slack_dm_ratio',            m365: 'm365_teams_chats',         meetings: 'teams_meeting_hours' },
+  { slack: 'slack_active_days',         m365: 'm365_files_engaged',       meetings: 'zoom_meetings' },
+  { slack: null,                        m365: 'm365_files_shared_internal', meetings: 'zoom_meeting_hours' },
+  { slack: null,                        m365: 'm365_files_shared_external', meetings: 'meeting_free' },
+  { slack: null,                        m365: 'm365_active_days',         meetings: null },
 ];
 
-const CollaborationSection: React.FC<{ metrics: BulletMetric[]; onDrillClick?: (id: string) => void }> = ({ metrics, onDrillClick }) => (
-  <CollapsibleSection title="Collaboration" defaultOpen={false}>
-    <div className="px-4 py-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
-        {COLLAB_COLUMNS.map(({ title, group }) => (
-          <div key={title}>
-            <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2.5">{title}</div>
-            <Legend />
-            <div className="flex flex-col gap-4">
-              {filterBulletsByLayoutGroup(metrics, group).map((m) => (
-                <BulletChart key={m.metric_key} metric={m} onDrillClick={onDrillClick} mode="chart" />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  </CollapsibleSection>
-);
+const CollaborationSection: React.FC<{ metrics: BulletMetric[]; onDrillClick?: (id: string) => void }> = ({ metrics, onDrillClick }) => {
+  const byKey = new Map(metrics.map((m) => [m.metric_key, m]));
+  const renderCell = (key: string | null) => {
+    if (!key) return <div />;
+    const metric = byKey.get(key);
+    if (!metric) return <div />;
+    return <BulletChart metric={metric} onDrillClick={onDrillClick} mode="chart" />;
+  };
 
-export const TeamBulletSections: React.FC<TeamBulletSectionsProps> = ({ bulletSections, onDrillClick }) => {
+  return (
+    <CollapsibleSection title="Collaboration" defaultOpen={false}>
+      <div className="px-4 py-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-3.5 gap-y-2">
+          <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2.5">Slack<Legend /></div>
+          <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2.5">Microsoft 365<Legend /></div>
+          <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2.5">Meetings · Microsoft 365 · Zoom<Legend /></div>
+          {ALIGNED_COLLAB_ROWS.flatMap((row, i) => [
+            <React.Fragment key={`s-${i}`}>{renderCell(row.slack)}</React.Fragment>,
+            <React.Fragment key={`m-${i}`}>{renderCell(row.m365)}</React.Fragment>,
+            <React.Fragment key={`v-${i}`}>{renderCell(row.meetings)}</React.Fragment>,
+          ])}
+        </div>
+      </div>
+    </CollapsibleSection>
+  );
+};
+
+export const TeamBulletSections: React.FC<TeamBulletSectionsProps> = ({
+  bulletSections,
+  sectionStatus = {},
+  sectionErrors = {},
+  onDrillClick,
+}) => {
   const byId = Object.fromEntries(bulletSections.map((s) => [s.id, s]));
+
+  // Decide what to show for each section card. A section renders its data
+  // when status is 'loaded' AND the bullet payload arrived, a skeleton when
+  // 'loading' (or status not yet emitted), an error placeholder otherwise.
+  // When status is undefined (server hasn't been asked yet), we render
+  // nothing — same as before — so the screen layout stays compact when a
+  // section isn't applicable.
+  const renderState = (sid: string): 'data' | 'loading' | 'errored' | 'skip' => {
+    const st = sectionStatus[sid];
+    if (st === 'loaded' && byId[sid]) return 'data';
+    if (st === 'loading') return 'loading';
+    if (st === 'errored') return 'errored';
+    return 'skip';
+  };
+
+  const taskDeliveryState = renderState('task_delivery');
+  const codeQualityState  = renderState('code_quality');
+  const aiAdoptionState   = renderState('ai_adoption');
+  const collabState       = renderState('collaboration');
 
   const taskDelivery = byId['task_delivery'];
   const codeQuality  = byId['code_quality'];
@@ -158,9 +227,9 @@ export const TeamBulletSections: React.FC<TeamBulletSectionsProps> = ({ bulletSe
   return (
     <div className="flex flex-col gap-3.5">
       {/* Task Delivery + Code & Quality — side by side */}
-      {(taskDelivery || codeQuality) && (
+      {(taskDeliveryState !== 'skip' || codeQualityState !== 'skip') && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
-          {taskDelivery && (
+          {taskDeliveryState === 'data' && taskDelivery && (
             <TwoColCard
               title="Task Delivery"
               subtitle="Team median vs company median"
@@ -168,7 +237,13 @@ export const TeamBulletSections: React.FC<TeamBulletSectionsProps> = ({ bulletSe
               onDrillClick={onDrillClick}
             />
           )}
-          {codeQuality && (
+          {taskDeliveryState === 'loading' && (
+            <SectionPlaceholder title="Task Delivery" kind="loading" />
+          )}
+          {taskDeliveryState === 'errored' && (
+            <SectionPlaceholder title="Task Delivery" kind="errored" error={sectionErrors['task_delivery']} />
+          )}
+          {codeQualityState === 'data' && codeQuality && (
             <TwoColCard
               title="Code & Quality"
               subtitle="Team median vs company median"
@@ -176,17 +251,35 @@ export const TeamBulletSections: React.FC<TeamBulletSectionsProps> = ({ bulletSe
               onDrillClick={onDrillClick}
             />
           )}
+          {codeQualityState === 'loading' && (
+            <SectionPlaceholder title="Code & Quality" kind="loading" />
+          )}
+          {codeQualityState === 'errored' && (
+            <SectionPlaceholder title="Code & Quality" kind="errored" error={sectionErrors['code_quality']} />
+          )}
         </div>
       )}
 
-      {/* Estimation */}
+      {/* Estimation — backend doesn't emit status for it; legacy conditional */}
       {estimation && <EstimationCard metrics={estimation.metrics} onDrillClick={onDrillClick} />}
 
-      {/* AI Adoption — collapsible */}
-      {aiAdoption && <AiAdoptionSection metrics={aiAdoption.metrics} onDrillClick={onDrillClick} />}
+      {/* AI Adoption */}
+      {aiAdoptionState === 'data' && aiAdoption && (
+        <AiAdoptionSection metrics={aiAdoption.metrics} onDrillClick={onDrillClick} />
+      )}
+      {aiAdoptionState === 'loading' && <SectionPlaceholder title="AI Adoption" kind="loading" />}
+      {aiAdoptionState === 'errored' && (
+        <SectionPlaceholder title="AI Adoption" kind="errored" error={sectionErrors['ai_adoption']} />
+      )}
 
-      {/* Collaboration — collapsible */}
-      {collab && <CollaborationSection metrics={collab.metrics} onDrillClick={onDrillClick} />}
+      {/* Collaboration */}
+      {collabState === 'data' && collab && (
+        <CollaborationSection metrics={collab.metrics} onDrillClick={onDrillClick} />
+      )}
+      {collabState === 'loading' && <SectionPlaceholder title="Collaboration" kind="loading" />}
+      {collabState === 'errored' && (
+        <SectionPlaceholder title="Collaboration" kind="errored" error={sectionErrors['collaboration']} />
+      )}
     </div>
   );
 };
