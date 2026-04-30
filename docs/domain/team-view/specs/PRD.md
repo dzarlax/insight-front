@@ -46,7 +46,7 @@
 
 ### 1.1 Purpose
 
-Team View is the role-aware screen that lets a team lead (or an executive drilling down) inspect a single team's engineering health, member-by-member. It surfaces who needs attention, what bullet metrics look like across delivery / AI adoption / focus / collaboration sections, and lets the viewer drill into any cell or member for details.
+Team View is the role-aware screen that lets a team lead (or an executive drilling down) inspect a single team's engineering health, member-by-member. It surfaces who needs attention, what bullet metrics look like across task delivery / code quality / estimation / AI adoption / collaboration sections, and lets the viewer drill into any cell or member for details.
 
 ### 1.2 Background / Problem Statement
 
@@ -70,7 +70,7 @@ Team leads and VPs need a per-team picture that goes beyond the executive aggreg
 - Render team-level KPI chips (`atRisk`, `belowFocus`, `noAi`, median dev time) computed client-side from the visible member set
 - List every team member with per-person metric columns and threshold-based coloring
 - Show a configurable "Attention Needed" panel listing members who tripped any `alert_threshold`
-- Render bullet sections (delivery / AI adoption / focus / collaboration / git output / task delivery) with their own thresholds
+- Render bullet sections (task delivery / code quality / estimation / AI adoption / collaboration) with their own thresholds
 - Let the viewer drill from any team-level chart, members-table cell, or member row into a detail modal or the IC Dashboard
 
 **Non-Goals (this revision)**:
@@ -87,7 +87,7 @@ Team leads and VPs need a per-team picture that goes beyond the executive aggreg
 | Team Lead | A user whose `currentUser.role === 'team_lead'`; the supervisor anchor for "direct reports only" |
 | Direct Reports Only | A viewer toggle that narrows the member list to people whose `supervisor_email` matches the team lead's email |
 | Hero Strip | The top KPI chip strip (`atRisk`, `belowFocus`, `noAi`, `devTimeMedian`), recomputed client-side over the currently visible member set via `deriveTeamKpis` |
-| Bullet Section | A grouped set of bullet charts for a metric area (`delivery`, `ai_adoption`, `focus_time`, `collaboration`, `git_output`, `task_delivery`) |
+| Bullet Section | A grouped set of bullet charts for a metric area (`task_delivery`, `code_quality`, `estimation`, `ai_adoption`, `collaboration`) |
 | Alert Threshold | A `trigger` value per metric used to flag at-risk members; sourced from `TEAM_VIEW_CONFIG.alert_thresholds` |
 | Drill | A focused detail popup (`DrillModal`) opened from a team-level or member-level interaction |
 | Honest null | A metric value rendered as em-dash / `ComingSoon` rather than `0` when the underlying connector is not configured |
@@ -142,7 +142,7 @@ Period changes re-fire `loadTeamView`. Navigation to IC Dashboard sets the IC pe
 - `TeamHeroStrip` — top KPI chips computed client-side over visible members
 - `AttentionNeeded` — list of members tripping any `alert_threshold`
 - `MembersTable` — sortable per-member table with threshold-driven cell coloring and click-through
-- `TeamBulletSections` — bullet charts grouped by metric area (delivery, AI, focus, etc.)
+- `TeamBulletSections` — bullet charts grouped by metric area (task delivery, code quality, estimation, AI adoption, collaboration)
 - `PeriodSelectorBar` + `ViewModeToggle` — viewer controls
 - `DrillModal` — detail popup opened from team-level or member-level interactions
 - "Direct reports only" toggle — anchored on team-lead email
@@ -200,7 +200,9 @@ The screen **MUST** render `MembersTable` with one row per visible member. Thres
 
 - [ ] `p1` - **ID**: `cpt-team-view-fr-bullet-sections`
 
-The screen **MUST** render `TeamBulletSections` for the configured sections (`delivery`, `ai_adoption`, `focus_time`, `collaboration`, `git_output`, `task_delivery`). Each section **MUST** show its bullets with their own thresholds; a section with all-null bullets **MUST** render as `ComingSoon` rather than disappearing.
+The screen **MUST** render `TeamBulletSections` for the configured sections (`task_delivery`, `code_quality`, `estimation`, `ai_adoption`, `collaboration`). Each section **MUST** show its bullets with their own thresholds; a section with all-null bullets **MUST** render as `ComingSoon` rather than disappearing.
+
+Section names **MUST** match the canonical taxonomy in `BULLET_DEFS` (`thresholdConfig.ts`). `git_output` is rendered only on IC Dashboard, not Team View.
 
 **Actors**: `cpt-team-view-actor-team-lead`
 
@@ -298,7 +300,7 @@ The screen depends on the `TEAM_MEMBERS` metric query (`METRIC_REGISTRY.TEAM_MEM
 
 - [ ] `p1` - **ID**: `cpt-team-view-contract-bullets`
 
-The screen depends on per-section bullet aggregate queries returning `RawBulletAggregateRow[]`. Sections covered: `delivery`, `ai_adoption`, `focus_time`, `collaboration`, `git_output`, `task_delivery`. Adding a section is additive; removing one is breaking and **MUST** be coordinated with `TeamBulletSections`.
+The screen depends on per-section bullet aggregate queries returning `RawBulletAggregateRow[]`. Sections covered: `task_delivery`, `code_quality`, `estimation`, `ai_adoption`, `collaboration`. Adding a section is additive; removing one is breaking and **MUST** be coordinated with `TeamBulletSections`.
 
 #### Drill Detail Contract
 
