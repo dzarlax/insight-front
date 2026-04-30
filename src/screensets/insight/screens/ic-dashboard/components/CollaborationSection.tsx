@@ -76,20 +76,22 @@ const CollaborationSection: React.FC<CollaborationSectionProps> = ({
   const meetingsMetrics = filterBulletsByLayoutGroup(metrics, 'meetings');
   const filesMetrics    = filterBulletsByLayoutGroup(metrics, 'files');
 
-  const renderColumn = (heading: string, items: BulletMetric[]): React.ReactElement => (
-    <div className="flex flex-col gap-4">
-      <ColumnHeading>{heading}</ColumnHeading>
-      {items.map((m) => (
-        <BulletChart
-          key={m.metric_key}
-          metric={m}
-          onDrillClick={onDrillClick}
-          mode="chart"
-          personName={personName}
-        />
-      ))}
-    </div>
-  );
+  function renderColumn(heading: string, items: BulletMetric[]): React.ReactElement {
+    return (
+      <div className="flex flex-col gap-4">
+        <ColumnHeading>{heading}</ColumnHeading>
+        {items.map((m) => (
+          <BulletChart
+            key={m.metric_key}
+            metric={m}
+            onDrillClick={onDrillClick}
+            mode="chart"
+            personName={personName}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="p-4">

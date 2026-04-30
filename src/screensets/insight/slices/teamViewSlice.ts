@@ -114,6 +114,9 @@ export const teamViewSlice = createSlice({
     },
     setSectionLoading: (state, action: PayloadAction<{ sectionId: string }>) => {
       const { sectionId } = action.payload;
+      // sectionId is dispatched by our own action layer with a literal string
+      // from a fixed enum; no user input reaches this lookup. See the IC
+      // slice for the full rationale.
       const wasLoaded = state.sectionStatus[sectionId] === 'loaded'
         || state.sectionStatus[sectionId] === 'revalidating';
       state.sectionStatus[sectionId] = wasLoaded ? 'revalidating' : 'loading';

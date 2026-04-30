@@ -156,14 +156,16 @@ const CollaborationSection: React.FC<{ metrics: BulletMetric[]; onDrillClick?: (
   const meetingsMetrics = filterBulletsByLayoutGroup(metrics, 'meetings');
   const filesMetrics    = filterBulletsByLayoutGroup(metrics, 'files');
 
-  const renderColumn = (heading: string, items: BulletMetric[]): React.ReactElement => (
-    <div className="flex flex-col gap-4">
-      <div className="text-xs font-bold text-gray-500 uppercase tracking-wide">{heading}</div>
-      {items.map((m) => (
-        <BulletChart key={m.metric_key} metric={m} onDrillClick={onDrillClick} mode="chart" />
-      ))}
-    </div>
-  );
+  function renderColumn(heading: string, items: BulletMetric[]): React.ReactElement {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="text-xs font-bold text-gray-500 uppercase tracking-wide">{heading}</div>
+        {items.map((m) => (
+          <BulletChart key={m.metric_key} metric={m} onDrillClick={onDrillClick} mode="chart" />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <CollapsibleSection title="Collaboration" defaultOpen={false}>
@@ -194,7 +196,11 @@ export const TeamBulletSections: React.FC<TeamBulletSectionsProps> = ({
   // When status is undefined (server hasn't been asked yet), we render
   // nothing — same as before — so the screen layout stays compact when a
   // section isn't applicable.
-  const renderState = (sid: string): 'data' | 'loading' | 'errored' | 'skip' => {
+  function renderState(sid: string): 'data' | 'loading' | 'errored' | 'skip' {
+    // sid is one of a small fixed set of literal section names; no user
+    // input reaches this lookup. Codacy's security/detect-object-injection
+    // rule still flags the bracket access — mark as false positive on
+    // review.
     const st = sectionStatus[sid];
     // Treat 'revalidating' the same as 'loaded' for layout — keep data on
     // screen; the dim/fade is applied by the per-section wrapper below.
@@ -202,12 +208,13 @@ export const TeamBulletSections: React.FC<TeamBulletSectionsProps> = ({
     if (st === 'loading') return 'loading';
     if (st === 'errored') return 'errored';
     return 'skip';
-  };
+  }
 
-  const dimClass = (sid: string): string =>
-    sectionStatus[sid] === 'revalidating'
+  function dimClass(sid: string): string {
+    return sectionStatus[sid] === 'revalidating'
       ? 'opacity-70 transition-opacity duration-300'
       : 'opacity-100 transition-opacity duration-300';
+  }
 
   const taskDeliveryState = renderState('task_delivery');
   const codeQualityState  = renderState('code_quality');

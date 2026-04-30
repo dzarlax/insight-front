@@ -117,10 +117,11 @@ const IcDashboardScreen: React.FC = () => {
   // Subtle "I'm refreshing" cue applied to sections that already have data but
   // are re-fetching — fades content to ~70% opacity until the new payload
   // lands. Animations are short (300ms) so they don't draw attention away.
-  const revalidatingClass = (status: string | undefined): string =>
-    status === 'revalidating'
+  function revalidatingClass(status: string | undefined): string {
+    return status === 'revalidating'
       ? 'opacity-70 transition-opacity duration-300'
       : 'opacity-100 transition-opacity duration-300';
+  }
 
   // Distinguish person change (hard reset, drop stale data) vs. period change
   // (soft reset, keep current values on screen as stale while fetch is in
@@ -139,7 +140,7 @@ const IcDashboardScreen: React.FC = () => {
         ? 'period'
         : 'person';
     reload(reason);
-  }, [personId, period, customRange, reload]);
+  }, [reload, personId]);
 
   // Filter bullet metrics by section. Section names are aligned with Team View
   // (transforms.ts / BULLET_DEFS) so the same defs drive labels+thresholds.
@@ -169,7 +170,7 @@ const IcDashboardScreen: React.FC = () => {
           <div className="text-sm text-gray-500 mb-3">{dashboardError}</div>
           <button
             type="button"
-            onClick={() => reload()}
+            onClick={() => { reload(); }}
             className="rounded-md border border-red-300 bg-white px-3 py-1 text-sm font-semibold text-red-600 hover:bg-red-50"
           >
             Retry
@@ -225,7 +226,7 @@ const IcDashboardScreen: React.FC = () => {
           </div>
         ) : kpisStatus === 'errored' ? (
           <div className="p-4">
-            <ComingSoon variant="row" state="error" onRetry={() => reload()} />
+            <ComingSoon variant="row" state="error" onRetry={() => { reload(); }} />
           </div>
         ) : (
           <div className={revalidatingClass(kpisStatus)}>
@@ -247,7 +248,7 @@ const IcDashboardScreen: React.FC = () => {
           loading={taskDeliveryStatus === 'loading'}
           revalidating={taskDeliveryStatus === 'revalidating'}
           errored={taskDeliveryStatus === 'errored'}
-          onRetry={() => reload()}
+          onRetry={() => { reload(); }}
         />
         <MetricCard
           title="Git Output"
@@ -259,7 +260,7 @@ const IcDashboardScreen: React.FC = () => {
           loading={gitOutputStatus === 'loading'}
           revalidating={gitOutputStatus === 'revalidating'}
           errored={gitOutputStatus === 'errored'}
-          onRetry={() => reload()}
+          onRetry={() => { reload(); }}
         />
       </div>
 
@@ -282,7 +283,7 @@ const IcDashboardScreen: React.FC = () => {
           {locTrendStatus === 'loading' && charts.locTrend.length === 0 ? (
             <ComingSoon variant="card" state="loading" />
           ) : locTrendStatus === 'errored' ? (
-            <ComingSoon variant="card" state="error" onRetry={() => reload()} />
+            <ComingSoon variant="card" state="error" onRetry={() => { reload(); }} />
           ) : (
             <div className={revalidatingClass(locTrendStatus)}>
               <LocStackedBar data={charts.locTrend} />
@@ -300,7 +301,7 @@ const IcDashboardScreen: React.FC = () => {
           {deliveryTrendStatus === 'loading' && charts.deliveryTrend.length === 0 ? (
             <ComingSoon variant="card" state="loading" />
           ) : deliveryTrendStatus === 'errored' ? (
-            <ComingSoon variant="card" state="error" onRetry={() => reload()} />
+            <ComingSoon variant="card" state="error" onRetry={() => { reload(); }} />
           ) : (
             <div className={revalidatingClass(deliveryTrendStatus)}>
               <DeliveryTrends data={charts.deliveryTrend} />
@@ -314,7 +315,7 @@ const IcDashboardScreen: React.FC = () => {
         {aiAdoptionStatus === 'loading' && aiToolsMetrics.length === 0 ? (
           <div className="p-4"><ComingSoon variant="card" state="loading" /></div>
         ) : aiAdoptionStatus === 'errored' ? (
-          <div className="p-4"><ComingSoon variant="card" state="error" onRetry={() => reload()} /></div>
+          <div className="p-4"><ComingSoon variant="card" state="error" onRetry={() => { reload(); }} /></div>
         ) : (
           <div className={revalidatingClass(aiAdoptionStatus)}>
             <AiToolsSection
@@ -332,7 +333,7 @@ const IcDashboardScreen: React.FC = () => {
         {collaborationStatus === 'loading' && collabMetrics.length === 0 ? (
           <div className="p-4"><ComingSoon variant="card" state="loading" /></div>
         ) : collaborationStatus === 'errored' ? (
-          <div className="p-4"><ComingSoon variant="card" state="error" onRetry={() => reload()} /></div>
+          <div className="p-4"><ComingSoon variant="card" state="error" onRetry={() => { reload(); }} /></div>
         ) : (
           <div className={revalidatingClass(collaborationStatus)}>
             <CollaborationSection

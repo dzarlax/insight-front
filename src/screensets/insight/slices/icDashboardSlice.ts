@@ -120,6 +120,11 @@ export const icDashboardSlice = createSlice({
     },
     setSectionLoading: (state, action: PayloadAction<{ sectionId: string }>) => {
       const { sectionId } = action.payload;
+      // sectionId is dispatched by our own action layer with a literal string
+      // from a fixed enum of section IDs; no user input reaches this lookup,
+      // so dynamic-key access here is safe. Codacy's
+      // security/detect-object-injection rule still flags it as a finding
+      // — mark as false positive in the Codacy UI on review.
       // If this section already has data, mark it `revalidating` so the UI
       // keeps rendering the previous values instead of flashing skeletons.
       // First load (no prior `loaded`) still gets `loading` for proper empty UX.
