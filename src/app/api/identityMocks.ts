@@ -28,9 +28,14 @@ for (const p of PEOPLE) {
     if (!tree) throw new MockNotFoundError(p.person_id);
     return tree as IdentityPersonRaw;
   };
-  map[`GET /api/identity-resolution/v1/persons/${encodeURIComponent(p.person_id)}`] = factory;
-  // The fetch path may also be unencoded depending on caller — register both.
-  map[`GET /api/identity-resolution/v1/persons/${p.person_id}`] = factory;
+  // hai3 RestMockPlugin matches against `context.url`, which may be either
+  // the absolute request URL or the baseURL-relative path depending on how
+  // axios is configured. Register both so neither path falls through to the
+  // real backend (analytics mocks use the same dual-key strategy).
+  for (const id of [encodeURIComponent(p.person_id), p.person_id]) {
+    map[`GET /api/identity-resolution/v1/persons/${id}`] = factory;
+    map[`GET /persons/${id}`] = factory;
+  }
 }
 
 export const identityMockMap: MockMap = map;
