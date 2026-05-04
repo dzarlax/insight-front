@@ -127,4 +127,31 @@ export const initializeCurrentUserEffects = (dispatch: AppDispatch): void => {
     }));
     dispatch(clearSelection());
   });
+
+  // Dev/mock bridge: bootstrap fetches identity and emits 'app/user/loaded'
+  // (header consumer), but no path turns that into a typed CurrentUser
+  // (role + teamId) so menus/team-view never receive scope. When mocks
+  // are on, resolve role and team from the PEOPLE registry by email and
+  // dispatch the same slice updates the UserChanged listener does
+  // (effects cannot emit events — FLUX rule).
+  if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_MOCKS === 'true') {
+    void import('../api/mocks/registry').then(({ PEOPLE_BY_ID }) => {
+      eventBus.on('app/user/loaded' as never, (payload: unknown) => {
+        const user = (payload as { user?: { email?: string } }).user;
+        if (!user?.email) return;
+        const person = PEOPLE_BY_ID[user.email];
+        if (!person) return;
+        const cu: CurrentUser = {
+          personId: person.person_id,
+          name: person.name,
+          role: person.is_lead ? 'team_lead' : 'ic',
+          teamId: person.team_id,
+        };
+        dispatch(setCurrentUser(cu));
+        dispatch(setMenuItems(buildMenuFromIdentity(cu) as Parameters<typeof setMenuItems>[0]));
+        dispatch(setViewer({ id: cu.personId, name: cu.name, role: cu.role, identity: null }));
+        dispatch(clearSelection());
+      });
+    });
+  }
 };
