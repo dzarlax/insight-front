@@ -411,7 +411,11 @@ export function transformBulletMetrics(
       // Auto-scale hour-bullets to days when the upper range crosses a
       // few days (industry default: 48h). Keeps display readable without
       // changing the underlying metric semantics or thresholds.
-      const scaled = scaleHoursToDays(effectiveUnit, r.value, r.median, rangeMin, rangeMax);
+      // Collaboration is opted out: meeting/call durations in days read
+      // strangely (a 60h month rendered as "3d" loses the timesheet feel).
+      const scaled = section === 'collaboration'
+        ? null
+        : scaleHoursToDays(effectiveUnit, r.value, r.median, rangeMin, rangeMax);
       const dispUnit  = scaled?.unit  ?? effectiveUnit;
       const dispVal   = scaled?.value ?? r.value;
       const dispMin   = scaled?.rangeMin ?? rangeMin;

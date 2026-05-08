@@ -75,7 +75,21 @@ function computeAlerts(members: TeamMember[], alertThresholds: AlertThreshold[])
 }
 
 export const AttentionNeeded: React.FC<AttentionNeededProps> = ({ members, alertThresholds, onNavigate }) => {
-  const alerts = computeAlerts(members, alertThresholds);
+  const allAlerts = computeAlerts(members, alertThresholds);
+  // Show at most one row per member — their worst-severity alert. This keeps
+  // the row count equal to the "At Risk" KPI (which counts members with ≥1
+  // breach), so the Attention Needed list and the KPI stay numerically
+  // consistent on screen instead of expanding to several rows per person.
+  const worstByMember = new Map<string, AlertItem>();
+  for (const a of allAlerts) {
+    const prev = worstByMember.get(a.member.person_id);
+    if (!prev || (a.severity === 'bad' && prev.severity !== 'bad')) {
+      worstByMember.set(a.member.person_id, a);
+    }
+  }
+  const alerts = [...worstByMember.values()].sort((a, b) =>
+    a.severity === b.severity ? 0 : a.severity === 'bad' ? -1 : 1,
+  );
   if (alerts.length === 0) return null;
 
   return (
